@@ -78,11 +78,11 @@ slope2 = slope2[:, (breast_end-256):breast_end, :]  # Dont cut across sagittal. 
 
 
 if resolution[0] > 0.5:
-    output_shape = (t1post.shape[0], t1post.shape[1]*2, int(t1post.shape[2]* (resolution[2]/0.33) ))
+    output_shape = (t1post.shape[0], t1post.shape[1]*2, int(t1post.shape[2]* (resolution[2]/0.5) ))
 #        output_shape = (512*2, 512*2, int(192*3.3))
 
 
-# RESIZE to match resolutions.  I need final resolution: (whatever, 0.3, 0.3)
+# RESIZE to match resolutions: (interslice, 0.5, 0.5)
 t1post = resize(t1post, output_shape=output_shape, preserve_range=True, anti_aliasing=False)
 slope1 = resize(slope1, output_shape=output_shape, preserve_range=True, anti_aliasing=False)
 slope2 = resize(slope2, output_shape=output_shape, preserve_range=True, anti_aliasing=False)
