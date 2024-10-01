@@ -29,21 +29,24 @@ seed(42)
 from tensorflow import set_random_seed
 set_random_seed(42)
 
-os.chdir('/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/scripts/')
+os.chdir('/Diagnosis_breast_cancer_MRI/scripts/')
 from model_utils import FocalLoss, UNet_v0_2D_Classifier
 
 #%% USER INPUT
 
-OUTPUT_PATH = '/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/sessions/' 
+OUTPUT_PATH = '/Diagnosis_breast_cancer_MRI/sessions/' 
 
 # Data description
-DATA_DESCRIPTION_PATH = '/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/Training_data/Data_Description.csv'
+DATA_DESCRIPTION_PATH = '/Diagnosis_breast_cancer_MRI/Training_data/Data_Description.csv'
+
+# Pre-trained model 
+PRETRAINED_MODEL_WEIGHTS_PATH = '/Diagnosis_breast_cancer_MRI/model/CNN_weights.npy' 
 
  # Pre-stored slices, normalized
-DATA_PATH = '/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/Training_data/images/'
+DATA_PATH = '/Diagnosis_breast_cancer_MRI/Training_data/images/'
 
 # Raw MRI data
-MRI_PATH = '/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/MRI/Breast_MRI_001/' 
+MRI_PATH = '/Diagnosis_breast_cancer_MRI/MRI/Breast_MRI_001/' 
 
 # Spatially aligned previous MRIs (optional)
 MRI_ALIGNED_HISTORY_PATH = ''
@@ -66,7 +69,6 @@ CNN = True
 RESNET = False
 
 LOAD_PRETRAINED_MODEL = True
-PRETRAINED_MODEL_WEIGHTS_PATH = '/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Diagnosis_breast_cancer_MRI/model/CNN_weights.npy' 
 
 USE_SMALLER_DATASET = False
 FRACTION = 0.1
