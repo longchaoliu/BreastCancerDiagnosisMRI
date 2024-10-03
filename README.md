@@ -3,6 +3,12 @@
 ![Results example](/figures/result_example-1.png)
 
 
+# Installation
+
+For those of you brave enough, you can attempt at making a conda environment using the provided yaml file.
+
+Docker container in the works...
+
 # Contents of folder: 
 
 This project is organized with the following directory structure:
