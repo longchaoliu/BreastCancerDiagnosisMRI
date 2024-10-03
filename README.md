@@ -2,11 +2,8 @@
 
 This project is organized with the following directory structure:
 
-**Diagnosis_breast_cancer_MRI/**
 
-* This directory contains MRI scans used for breast cancer diagnosis. 
-
-**MRI/**
+**data/**
 
 * This directory holds preprocessed MRI images in NIfTI format (`.nii.gz`) for analysis. Specific filenames suggest different acquisition sequences or orientations. This folder contains an axial MRI image of a breast. The image is obtained from a public dataset released by Duke
 University (https://sites.duke.edu/mazurowski/resources/breast-cancer-mri-dataset/)
@@ -16,7 +13,7 @@ University (https://sites.duke.edu/mazurowski/resources/breast-cancer-mri-datase
     * `T1_axial_01.nii.gz`
     * `T1_axial_02.nii.gz`
 
-**Model/**
+**model/**
 
 * This directory stores the trained model for breast cancer diagnosis:
     * `CNN_weights.npy` - This file contains the weights for a Convolutional Neural Network (CNN).
@@ -49,14 +46,14 @@ model.set_weights(model_weights)
 ``` 
 
 
-**Scripts/**
+**code/**
 
 * This directory holds scripts for various tasks:
     * `model_utils.py` - This script contain utility functions for working with the model.
     * `make_diagnosis_on_MRI.py` - This script is used to make predictions on unseen MRI scans.
     * `train_model.py` - This script is used to train the CNN model from scratch or fine-tune existing weights.
 
-**Training_data/**
+**training_data/**
 
 * This directory holds training data used to train the model:
     * `Data_Description.csv` - The specific data here was generated at random and only serves the purpose of demonstrating the expected data format:
@@ -72,18 +69,7 @@ model.set_weights(model_weights)
       * Family Hx : From clinical information of exam
       * Ethnicity and Race : From clinical information of exam
 
-  **/images/**
-
-* Description: This folder contains the necessary files for a new training session. It includes a spreadsheet with
-information on the training data and a folder with images to train the network. These images are examples taken
-from the same public dataset from Duke University. They are saved as PNG images for easier visualization. Note
-that due to the RGB color format, the images may appear unusual.
-The naming convention for the images is: Subject_Exam_Side_SliceNumber. The examples have fake names to
-serve as an example
-
-    * `SUBJECT2_EXAM1_l_14.png`, etc
-      
-**Sessions/**
+**sessions/**
 
 * This folder is used to store the output of each new training session. It saves the trained
 models, evaluation metrics, and any other relevant information generated during the
