@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-MODEL_WEIGHTS_PATH = '/model/best_model_weights.npy'
+MODEL_WEIGHTS_PATH = '/model/pretrained_model_weights.npy'
             
 
 t1post_path = "/data/Breast_MRI_001/T1_axial_02.nii.gz"
