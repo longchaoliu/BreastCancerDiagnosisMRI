@@ -1,2 +1,20 @@
-/data
-/code
+# .gitignore file
+# This file tells Git which files and directories to ignore
+
+# Compiled binaries
+*.bin
+*.so
+*.dll
+
+# Temporary files
+*.swp
+*.tmp
+*~
+
+# Log files
+*.log
+
+# Data folder
+data/
+code/
+
