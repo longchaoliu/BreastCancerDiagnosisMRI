@@ -11,12 +11,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-MODEL_WEIGHTS_PATH = '/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/model/best_model_weights.npy'
+MODEL_WEIGHTS_PATH = '/model/best_model_weights.npy'
             
 
-t1post_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_02.nii.gz"
-slope1_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
-slope2_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
+t1post_path = "/data/Breast_MRI_001/T1_axial_02.nii.gz"
+slope1_path = "/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
+slope2_path = "/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
 
 T1_pre_nii_path = ''
 MODALITY = 'axial' # 'axial'
@@ -25,7 +25,10 @@ SIDE = ''
 
 if __name__ == '__main__':
     
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    current_working_directory = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(current_working_directory)
+    
+    project_directory = '/'.join(current_working_directory.split('/')[:-1])
 
     from utils import UNet_v0_2D_Classifier, load_and_preprocess, color_map, generate_gradCAM_image
 
@@ -33,12 +36,14 @@ if __name__ == '__main__':
                                              deconvolution=True, depth=6, n_base_filters=42,
                                              activation_name="softmax", L2=1e-5, USE_CLINICAL=True)
     
-    loaded_weights = np.load(MODEL_WEIGHTS_PATH, allow_pickle=True, encoding='latin1')
+    loaded_weights = np.load(project_directory + MODEL_WEIGHTS_PATH, allow_pickle=True, encoding='latin1')
     
     model.set_weights(loaded_weights)
     
 
-    all_subject_channels = [t1post_path, slope1_path, slope2_path]
+    all_subject_channels = [project_directory + t1post_path, 
+                            project_directory + slope1_path, 
+                            project_directory + slope2_path]
      
     X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=True)
     
@@ -85,14 +90,13 @@ if __name__ == '__main__':
     # from skimage.transform import resize
     # heatmap_resized = resize(heatmap, output_shape=(512,512), anti_aliasing=True)
     
-
     
     rgb_color = color_map(global_prediction)
     
     plt.figure(1)
     fig, ax = plt.subplots(4,1, sharex=True, figsize=(5,10))    
     
-    ax[0].set_title(f'{t1post_path}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{t1post_path.split("/")[-1]}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
@@ -113,12 +117,15 @@ if __name__ == '__main__':
     ax[3].set_aspect('auto'); ax[1].set_xticks([]); ax[3].set_yticks([])
     ax[3].vlines(max_slice,0,512,color=rgb_color)
     ax[3].set_aspect('auto');
+    
+    
+    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig1.png', dpi=300)
        
     
     plt.figure(2)
     fig, ax = plt.subplots(1,4, figsize=(15,5))    
     
-    ax[0].set_title(f'{t1post_path}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{t1post_path.split("/")[-1]}\n P(cancer) = '  + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
@@ -152,9 +159,14 @@ if __name__ == '__main__':
     
     plt.tight_layout()
     
+    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig2.png', dpi=300)
+
+
     
     plt.figure(3)
     fig, axes = plt.subplots(1,3, figsize=(15,5))
     axes[0].imshow(np.rot90(X[max_slice:max_slice+1][0,:,:,0]), cmap='gray', aspect="auto"), axes[0].set_xticks([]) , axes[0].set_yticks([])
     axes[1].imshow(np.rot90(X[max_slice:max_slice+1][0,:,:,1]), cmap='gray', aspect="auto"), axes[1].set_xticks([]) , axes[1].set_yticks([])
     axes[2].imshow(np.rot90(superimposed_img), aspect="auto"); axes[2].set_title('T1post + heatmap'); axes[2].set_xticks([]) , axes[2].set_yticks([])
+
+    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig3.png', dpi=300)
