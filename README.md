@@ -1,6 +1,6 @@
 # Detection of breast cancer in MRI
 
-![alt text](/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/result_example.pdf)
+![Results example](/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/figures/result_example-1.png)
 
 
 # Contents of folder: 
