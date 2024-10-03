@@ -12,11 +12,12 @@ import matplotlib.pyplot as plt
 
 
 MODEL_WEIGHTS_PATH = '/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/model/best_model_weights.npy'
-                     
-#---- JHU Exam -----------------------
-t1post_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/MRI/ML00925838_20140504/T1_axial_02.nii"
-slope1_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/MRI/ML00925838_20140504/T1_axial_slope1.nii"
-slope2_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/MRI/ML00925838_20140504/T1_axial_slope2.nii"
+            
+
+t1post_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_02.nii.gz"
+slope1_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
+slope2_path = "/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
+
 T1_pre_nii_path = ''
 MODALITY = 'axial' # 'axial'
 SIDE = ''

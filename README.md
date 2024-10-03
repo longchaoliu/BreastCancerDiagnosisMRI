@@ -1,3 +1,8 @@
+# Detection of breast cancer in MRI
+
+![alt text](/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/result_example.pdf)
+
+
 # Contents of folder: 
 
 This project is organized with the following directory structure:
