@@ -9,7 +9,7 @@ Created on Tue Mar 21 16:47:06 2023
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-
+import sys
 
 MODEL_WEIGHTS_PATH = '/model/pretrained_model_weights.npy'
             
@@ -25,10 +25,12 @@ SIDE = ''
 
 if __name__ == '__main__':
     
-    current_working_directory = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(current_working_directory)
+    project_directory = os.path.dirname(os.path.abspath(__file__))
     
-    project_directory = '/'.join(current_working_directory.split('/')[:-1])
+    sys.path.append(project_directory + '/code/')
+    
+    os.chdir(project_directory + '/')
+
 
     from utils import UNet_v0_2D_Classifier, load_and_preprocess, color_map, generate_gradCAM_image
 
@@ -68,15 +70,15 @@ if __name__ == '__main__':
     global_prediction = np.max(preds)
     max_slice = np.argwhere(preds == global_prediction)[0][0]
     
-    if MODALITY == 'axial':
-        image_half = preds.shape[0]//2
-        left_breast_predictions = preds[:image_half]
-        right_breast_predictions = preds[image_half:]
-        print(f'{image_half}')
-        print(f'{len(left_breast_predictions)}, {len(right_breast_predictions)}')
+    # if MODALITY == 'axial':
+    #     image_half = preds.shape[0]//2
+    #     left_breast_predictions = preds[:image_half]
+    #     right_breast_predictions = preds[image_half:]
+    #     print(f'{image_half}')
+    #     print(f'{len(left_breast_predictions)}, {len(right_breast_predictions)}')
             
-        left_breast_global_pred = np.max(left_breast_predictions)
-        right_breast_global_pred = np.max(right_breast_predictions)
+    #     left_breast_global_pred = np.max(left_breast_predictions)
+    #     right_breast_global_pred = np.max(right_breast_predictions)
     
     
     axial_projection_t1post = np.max(X[:,:,:,0],2)
