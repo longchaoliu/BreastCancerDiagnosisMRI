@@ -63,7 +63,7 @@ if __name__ == '__main__':
     #     clinical_features = np.array(MODE_CLINICAL)
         
         
-    preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=0)[:,-1]
+    preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=1)[:,-1]
         
     print('prediction done..')
     # preds_gated = preds*slices_on_breast[1:]
