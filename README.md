@@ -5,7 +5,9 @@
 
 # Installation
 
-For those of you brave enough, you can attempt at making a conda environment using the provided yaml file.
+Code tested in tensorflow 2.8.4 in google colab (notebook provided for running demo)
+
+yaml file for installing a conda environment for tensorflow 2.0.0 provided
 
 Docker container in the works...
 
