@@ -13,9 +13,9 @@ import sys
 
 MODEL_WEIGHTS_PATH = '/model/pretrained_model_weights.npy'
             
-t1post_path = "/data/Breast_MRI_001/T1_axial_02.nii.gz"
-slope1_path = "/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
-slope2_path = "/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
+T1_POST_PATH = "/data/Breast_MRI_001/T1_axial_02.nii.gz"
+DCE_IN_PATH = "/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
+DCE_OUT_PATH = "/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
 
 T1_pre_nii_path = '' # If data already normalized, no need for T1pre image
 MODALITY = 'axial' # 'axial'
@@ -41,23 +41,15 @@ if __name__ == '__main__':
     model.set_weights(loaded_weights)
     
     # Load and process data
-    all_subject_channels = [project_directory + t1post_path, 
-                            project_directory + slope1_path, 
-                            project_directory + slope2_path] 
+    all_subject_channels = [project_directory + T1_POST_PATH, 
+                            project_directory + DCE_IN_PATH, 
+                            project_directory + DCE_OUT_PATH] 
     X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=True)
     
     
     # Clinical and demographic information if available
     MODE_CLINICAL = np.array([[0.  , 0.51, 0.  , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 1.  ]])
-  
-    # clinical['exam'] = clinical['scan_ID'].str[:-2]
-    # clinical = clinical.drop_duplicates('exam')
-    # clinical = pd.read_csv('/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/Sessions/FullData_RandomSlices_DataAug__classifier_train52598_val5892_DataAug_Clinical_depth6_filters42_L21e-05_batchsize8/Clinical_Data_Train.csv')
-    # if EXAM in clinical['exam'].values:
-    #     clinical_features = clinical.loc[clinical['exam'] == EXAM, [u'Family Hx',u'Age',u'ETHNICITY_HISPANIC OR LATINO',u'ETHNICITY_NOT HISPANIC', u'ETHNICITY_UNKNOWN',u'RACE_ASIAN-FAR EAST/INDIAN SUBCONT',u'RACE_BLACK OR AFRICAN AMERICAN',u'RACE_NATIVE AMERICAN-AM IND/ALASKA',u'RACE_NATIVE HAWAIIAN OR PACIFIC ISL',u'RACE_UNKNOWN',u'RACE_WHITE']].values
-    # else:
-    #     clinical_features = np.array(MODE_CLINICAL)
-        
+          
     print('Data preprocessed.. model inference')    
     preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=0)[:,-1]
         
@@ -66,18 +58,7 @@ if __name__ == '__main__':
     print('prediction done..')
     
     global_prediction = np.max(preds)
-    max_slice = np.argwhere(preds == global_prediction)[0][0]
-    
-    # if MODALITY == 'axial':
-    #     image_half = preds.shape[0]//2
-    #     left_breast_predictions = preds[:image_half]
-    #     right_breast_predictions = preds[image_half:]
-    #     print(f'{image_half}')
-    #     print(f'{len(left_breast_predictions)}, {len(right_breast_predictions)}')
-            
-    #     left_breast_global_pred = np.max(left_breast_predictions)
-    #     right_breast_global_pred = np.max(right_breast_predictions)
-    
+    max_slice = np.argwhere(preds == global_prediction)[0][0]   
     
     # Generate gradCAM for in-slice visualization
     print('Generating gradCAM heatmap..')
@@ -95,7 +76,7 @@ if __name__ == '__main__':
     plt.figure(1)
     fig, ax = plt.subplots(4,1, sharex=True, figsize=(5,10))    
     
-    ax[0].set_title(f'{t1post_path.split("/")[-1]}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{T1_POST_PATH.split("/")[-1]}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
@@ -124,7 +105,7 @@ if __name__ == '__main__':
     plt.figure(2)
     fig, ax = plt.subplots(1,4, figsize=(15,5))    
     
-    ax[0].set_title(f'{t1post_path.split("/")[-1]}\n P(cancer) = '  + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{T1_POST_PATH.split("/")[-1]}\n P(cancer) = '  + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
