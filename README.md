@@ -21,10 +21,10 @@ This project is organized with the following directory structure:
 * This directory holds preprocessed MRI images in NIfTI format (`.nii.gz`) for analysis. Specific filenames suggest different acquisition sequences or orientations. This folder contains an axial MRI image of a breast. The image is obtained from a public dataset released by Duke
 University (https://sites.duke.edu/mazurowski/resources/breast-cancer-mri-dataset/)
 
+    * `T1_axial_02.nii.gz`
     * `T1_axial_slope1.nii.gz`
     * `T1_axial_slope2.nii.gz`
-    * `T1_axial_01.nii.gz`
-    * `T1_axial_02.nii.gz`
+
 
 **model/**
 
