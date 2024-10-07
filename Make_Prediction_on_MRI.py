@@ -13,45 +13,41 @@ import sys
 
 MODEL_WEIGHTS_PATH = '/model/pretrained_model_weights.npy'
             
-
 t1post_path = "/data/Breast_MRI_001/T1_axial_02.nii.gz"
 slope1_path = "/data/Breast_MRI_001/T1_axial_slope1.nii.gz"
 slope2_path = "/data/Breast_MRI_001/T1_axial_slope2.nii.gz"            
 
-T1_pre_nii_path = ''
+T1_pre_nii_path = '' # If data already normalized, no need for T1pre image
 MODALITY = 'axial' # 'axial'
 SIDE = ''
 
 
 if __name__ == '__main__':
     
+    # Change directory
     project_directory = os.path.dirname(os.path.abspath(__file__))
-    
     sys.path.append(project_directory + '/code/')
-    
     os.chdir(project_directory + '/')
-
-
+    
+    # Load util functions
     from utils import UNet_v0_2D_Classifier, load_and_preprocess, color_map, generate_gradCAM_image
 
+    # Load model architecture
     model = UNet_v0_2D_Classifier(input_shape =  (512,512,3), pool_size=(2, 2),initial_learning_rate=1e-5, 
                                              deconvolution=True, depth=6, n_base_filters=42,
                                              activation_name="softmax", L2=1e-5, USE_CLINICAL=True)
-    
+    # Load pre-trained weights stored as numpy array to avoid tensorflow version incompatibility
     loaded_weights = np.load(project_directory + MODEL_WEIGHTS_PATH, allow_pickle=True, encoding='latin1')
-    
     model.set_weights(loaded_weights)
     
-
+    # Load and process data
     all_subject_channels = [project_directory + t1post_path, 
                             project_directory + slope1_path, 
-                            project_directory + slope2_path]
-     
+                            project_directory + slope2_path] 
     X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=True)
     
-    print('Data preprocessed.. model inference')
     
-    
+    # Clinical and demographic information if available
     MODE_CLINICAL = np.array([[0.  , 0.51, 0.  , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 1.  ]])
   
     # clinical['exam'] = clinical['scan_ID'].str[:-2]
@@ -62,11 +58,10 @@ if __name__ == '__main__':
     # else:
     #     clinical_features = np.array(MODE_CLINICAL)
         
-        
+    print('Data preprocessed.. model inference')    
     preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=0)[:,-1]
-        
     print('prediction done..')
-    # preds_gated = preds*slices_on_breast[1:]
+    
     global_prediction = np.max(preds)
     max_slice = np.argwhere(preds == global_prediction)[0][0]
     
@@ -81,19 +76,18 @@ if __name__ == '__main__':
     #     right_breast_global_pred = np.max(right_breast_predictions)
     
     
-    axial_projection_t1post = np.max(X[:,:,:,0],2)
-    axial_projection_slope1 = np.max(X[:,:,:,1],2)
-    axial_projection_slope2 = np.max(X[:,:,:,2],2)
-    
+    # Generate gradCAM for in-slice visualization
     print('Generating gradCAM heatmap..')
-    heatmap, img, superimposed_img = generate_gradCAM_image(model, X[max_slice:max_slice+1], MODE_CLINICAL ,alpha = 0.30)
-    
-    
+    heatmap, img, superimposed_img = generate_gradCAM_image(model, X[max_slice:max_slice+1], MODE_CLINICAL ,alpha = 0.30)   
     # from skimage.transform import resize
     # heatmap_resized = resize(heatmap, output_shape=(512,512), anti_aliasing=True)
     
-    
+    # Plot results    
     rgb_color = color_map(global_prediction)
+
+    axial_projection_t1post = np.max(X[:,:,:,0],2)
+    axial_projection_slope1 = np.max(X[:,:,:,1],2)
+    axial_projection_slope2 = np.max(X[:,:,:,2],2)
     
     plt.figure(1)
     fig, ax = plt.subplots(4,1, sharex=True, figsize=(5,10))    
@@ -121,7 +115,7 @@ if __name__ == '__main__':
     ax[3].set_aspect('auto');
     
     plt.show()
-    plt.savefig(project_directory + '/figures/fig1.png', dpi=300)
+    # plt.savefig(project_directory + '/figures/fig1.png', dpi=300)
        
     
     plt.figure(2)
@@ -162,7 +156,7 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
     
-    plt.savefig(project_directory + '/fig2.png', dpi=300)
+    # plt.savefig(project_directory + '/fig2.png', dpi=300)
 
 
     
@@ -173,4 +167,4 @@ if __name__ == '__main__':
     axes[2].imshow(np.rot90(superimposed_img), aspect="auto"); axes[2].set_title('T1post + heatmap'); axes[2].set_xticks([]) , axes[2].set_yticks([])
     plt.show()
 
-    plt.savefig(project_directory + '/fig3.png', dpi=300)
+    # plt.savefig(project_directory + '/fig3.png', dpi=300)
