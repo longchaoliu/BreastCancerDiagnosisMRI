@@ -7,7 +7,7 @@ Created on Wed Aug  7 15:39:18 2024
 """
 
 
-GPU = 1
+GPU = 0
 
 import tensorflow as tf
 if tf.__version__[0] == '1':
