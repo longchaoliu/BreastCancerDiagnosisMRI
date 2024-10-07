@@ -120,8 +120,8 @@ if __name__ == '__main__':
     ax[3].vlines(max_slice,0,512,color=rgb_color)
     ax[3].set_aspect('auto');
     
-    
-    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig1.png', dpi=300)
+    plt.show()
+    plt.savefig(project_directory + '/figures/fig1.png', dpi=300)
        
     
     plt.figure(2)
@@ -160,8 +160,9 @@ if __name__ == '__main__':
         spine.set_linewidth(2)  # Change thickness as desired
     
     plt.tight_layout()
+    plt.show()
     
-    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig2.png', dpi=300)
+    plt.savefig(project_directory + '/fig2.png', dpi=300)
 
 
     
@@ -170,5 +171,6 @@ if __name__ == '__main__':
     axes[0].imshow(np.rot90(X[max_slice:max_slice+1][0,:,:,0]), cmap='gray', aspect="auto"), axes[0].set_xticks([]) , axes[0].set_yticks([])
     axes[1].imshow(np.rot90(X[max_slice:max_slice+1][0,:,:,1]), cmap='gray', aspect="auto"), axes[1].set_xticks([]) , axes[1].set_yticks([])
     axes[2].imshow(np.rot90(superimposed_img), aspect="auto"); axes[2].set_title('T1post + heatmap'); axes[2].set_xticks([]) , axes[2].set_yticks([])
+    plt.show()
 
-    plt.savefig('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/fig3.png', dpi=300)
+    plt.savefig(project_directory + '/fig3.png', dpi=300)
