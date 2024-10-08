@@ -21,8 +21,8 @@ Docker container in the works...
 
 To run a demo on the public dataset present, simply run the following lines on a google colab Jupiter notebook (make sure to change runtime type to give access to GPUs for faster inference).
 
-`!git clone -b develop https://github.com/lkshrsch/BreastCancerDiagnosisMRI.git`
-`%run BreastCancerDiagnosisMRI/Make_Prediction_on_MRI.py`
+<br/>`!git clone -b develop https://github.com/lkshrsch/BreastCancerDiagnosisMRI.git`
+<br/>`%run BreastCancerDiagnosisMRI/Make_Prediction_on_MRI.py`
 
 
 # Contents of project: 
