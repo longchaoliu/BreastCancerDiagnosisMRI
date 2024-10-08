@@ -1,20 +1,23 @@
 # Detection of breast cancer in MRI
 
+This repository contains a pre-trained convolutional neural network for breast cancer detection in DCE-MRI. The provided pipeline takes as an input three volumetric MR images: A T1w post-contrast image, a DCE-in image and a DCE-out image (pre-processing for generating the difference images will be provided soon). A list of demographic and clinical information is optional (on the works). The output is a vector with the predicted probability of cancer for each sagittal slice in the input and a gradCAM image showing the location within the maximum probability slice:
+
 ![Results example](/figures/result_example-1.png)
 
 
 # Installation
 
-Code tested in tensorflow 2.8.4 in google colab (notebook provided for running demo)
+Code runs in the following tensorflow vesions: 2.9.0; 2.8.4; 2.0.0 
+
+google colab notebook provided for running demo on a public released axial MRI (see below Contents of project).
 
 yaml file for installing a conda environment for tensorflow 2.0.0 provided
 
 Docker container in the works...
 
-# Contents of folder: 
+# Contents of project: 
 
 This project is organized with the following directory structure:
-
 
 **data/**
 
