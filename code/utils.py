@@ -130,7 +130,7 @@ def FocalLoss(y_true, y_pred):
     return -tf.keras.backend.mean(term_0 + term_1, axis=0)
 
 
-def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2),initial_learning_rate=1e-5, deconvolution=True,
+def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2), deconvolution=True,
                       depth=4, n_base_filters=32, activation_name="softmax", L2=0, USE_CLINICAL=False):
         """ Simple version, padding 'same' on every layer, output size is equal to input size. Has border artifacts and checkerboard artifacts """
         inputs = Input(input_shape)
@@ -157,16 +157,14 @@ def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2),initial_
             current_layer = tf.keras.layers.concatenate([image_features, clinical_inputs])
             
             current_layer = tf.keras.layers.Dense(16, activation='relu')(current_layer)
-            act = tf.keras.layers.Dense(2, activation='softmax')(current_layer)
+            act = tf.keras.layers.Dense(2, activation=activation_name)(current_layer)
             
             model = Model(inputs=[inputs, clinical_inputs], outputs=act)
 
         
         else:
-            act = tf.keras.layers.Dense(2, activation='softmax')(current_layer)
+            act = tf.keras.layers.Dense(2, activation=activation_name)(current_layer)
             model = Model(inputs=[inputs], outputs=act)
-
-        model.compile(loss=FocalLoss, optimizer=Adam(lr=initial_learning_rate), metrics=['acc'])
 
         return model
     

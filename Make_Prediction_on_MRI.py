@@ -30,15 +30,14 @@ if __name__ == '__main__':
     os.chdir(project_directory + '/')
     
     # Load util functions
-    from utils import UNet_v0_2D_Classifier, load_and_preprocess, color_map, generate_gradCAM_image
+    from utils import UNet_v0_2D_Classifier, load_and_preprocess, color_map, generate_gradCAM_image#, FocalLoss
 
     # Load model architecture
-    model = UNet_v0_2D_Classifier(input_shape =  (512,512,3), pool_size=(2, 2),initial_learning_rate=1e-5, 
-                                             deconvolution=True, depth=6, n_base_filters=42,
-                                             activation_name="softmax", L2=1e-5, USE_CLINICAL=True)
+    model = UNet_v0_2D_Classifier(input_shape =  (512,512,3), pool_size=(2, 2), deconvolution=True, 
+                                  depth=6, n_base_filters=42, activation_name="softmax", L2=1e-5, USE_CLINICAL=True)
     # Load pre-trained weights stored as numpy array to avoid tensorflow version incompatibility
     loaded_weights = np.load(project_directory + MODEL_WEIGHTS_PATH, allow_pickle=True, encoding='latin1')
-    model.set_weights(loaded_weights)
+    model.set_weights(loaded_weights) # no need to compile model as we are just doing inference.
     
     # Load and process data
     all_subject_channels = [project_directory + T1_POST_PATH, 
