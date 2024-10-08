@@ -7,7 +7,7 @@ This repository contains a pre-trained convolutional neural network for breast c
 
 # Installation
 
-Code runs in the following tensorflow vesions: 2.9.0; 2.8.4; 2.0.0 
+Code runs in the following tensorflow vesions: 2.15.0; 2.10.0; 2.9.0; 2.8.4; 2.0.0 
 
 google colab notebook provided for running demo on a public released axial MRI (see below Contents of project).
 
