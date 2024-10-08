@@ -153,7 +153,7 @@ def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2),initial_
         image_features = tf.keras.layers.Dense(24, activation='relu')(current_layer)
         
         if USE_CLINICAL:
-            clinical_inputs = Input((11))
+            clinical_inputs = Input(shape=(11,))
             current_layer = tf.keras.layers.concatenate([image_features, clinical_inputs])
             
             current_layer = tf.keras.layers.Dense(16, activation='relu')(current_layer)
