@@ -44,7 +44,8 @@ if __name__ == '__main__':
     all_subject_channels = [project_directory + T1_POST_PATH, 
                             project_directory + DCE_IN_PATH, 
                             project_directory + DCE_OUT_PATH] 
-    X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=True)
+    
+    X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=False)
     
     
     # Clinical and demographic information if available
@@ -52,9 +53,6 @@ if __name__ == '__main__':
           
     print('Data preprocessed.. model inference')    
     preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=0)[:,-1]
-        
-    preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=1)[:,-1]
-        
     print('prediction done..')
     
     global_prediction = np.max(preds)
