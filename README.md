@@ -34,7 +34,7 @@ University (https://sites.duke.edu/mazurowski/resources/breast-cancer-mri-datase
 **model/**
 
 * This directory stores the trained model for breast cancer diagnosis:
-    * `CNN_weights.npy` - This file contains the weights for a Convolutional Neural Network (CNN).
+    * `pretrained_model_weights.npy` - This file contains the weights for a Convolutional Neural Network (CNN).
 
 *Model Architecture*
 The breast cancer detection model is a UNet architecture with the following specifications:
