@@ -17,6 +17,14 @@ yaml file for installing a conda environment for tensorflow 2.0.0 provided
 
 Docker container in the works...
 
+# Run on Google Colab
+
+To run a demo on the public dataset present, simply run the following lines on a google colab Jupiter notebook (make sure to change runtime type to give access to GPUs for faster inference).
+
+`!git clone -b develop https://github.com/lkshrsch/BreastCancerDiagnosisMRI.git`
+`%run BreastCancerDiagnosisMRI/Make_Prediction_on_MRI.py`
+
+
 # Contents of project: 
 
 This project is organized with the following directory structure:
