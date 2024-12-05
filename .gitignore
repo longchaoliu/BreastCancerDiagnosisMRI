@@ -17,3 +17,7 @@
 # Data folder
 metadata/
 dev_code/
+sessions/
+
+# scripts
+

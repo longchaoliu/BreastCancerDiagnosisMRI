@@ -7,25 +7,25 @@ Created on Wed Aug  7 15:39:18 2024
 """
 
 
-GPU = 0
+# GPU = 2
 
 import tensorflow as tf
-if tf.__version__[0] == '1':
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.gpu_options.visible_device_list="0"
-    tf.keras.backend.set_session(tf.Session(config=config))
+# if tf.__version__[0] == '1':
+#     config = tf.ConfigProto()
+#     config.gpu_options.allow_growth = True
+#     config.gpu_options.visible_device_list="0"
+#     tf.keras.backend.set_session(tf.Session(config=config))
 
-elif tf.__version__[0] == '2':
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-      # Restrict TensorFlow to only use the first GPU
-      try:
-        tf.config.experimental.set_visible_devices(gpus[GPU], 'GPU')
-        tf.config.experimental.set_memory_growth(gpus[GPU], True)
-      except RuntimeError as e:
-        # Visible devices must be set at program startup
-        print(e)
+# elif tf.__version__[0] == '2':
+#     gpus = tf.config.experimental.list_physical_devices('GPU')
+#     if gpus:
+#       # Restrict TensorFlow to only use the first GPU
+#       try:
+#         tf.config.experimental.set_visible_devices(gpus[GPU], 'GPU')
+#         tf.config.experimental.set_memory_growth(gpus[GPU], True)
+#       except RuntimeError as e:
+#         # Visible devices must be set at program startup
+#         print(e)
         
 import numpy as np
 import matplotlib.pyplot as plt
@@ -171,7 +171,7 @@ def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2), deconvo
     
 #%%
 
-def load_and_preprocess_V0(all_subject_channels, T1_pre_nii_path):
+def load_and_preprocess_DEPRECATED(all_subject_channels, T1_pre_nii_path):
   
     t1post = nib.load(all_subject_channels[0]).get_fdata()
    
@@ -199,15 +199,64 @@ def load_and_preprocess_V0(all_subject_channels, T1_pre_nii_path):
 
 
 
-def load_and_preprocess(all_subject_channels, T1_pre_nii_path='',side='left', imaging_protocol='axial', breast_center=0, debug=False, order=1):
+def load_and_preprocess(all_subject_channels, T1_pre_nii_path='',imaging_protocol='axial',side=None, breast_center=0, debug=False, order=1):
 
-    ''' Make it work for both axial and sagittal'''    
-
-    hdr = nib.load(all_subject_channels[0])
-    t1post = hdr.get_fdata()
+    """
+      Loads and preprocesses multiple MRI channels for breast analysis.
+    
+      This function loads three MRI channels specified by `all_subject_channels` 
+      and performs preprocessing steps including:
+    
+      * Resampling to a target resolution of 0.4mm x 0.4mm
+      * Cropping/padding to a size of 512 x 512 pixels
+      * (Optional) Normalization based on the 95th percentile of a provided T1 pre-contrast image
+      * Normalization to specific intensity ranges for each channel
+    
+      Args:
+          all_subject_channels: A list of three strings representing the file paths 
+                                to the MRI channels to be loaded.
+          T1_pre_nii_path: (Optional) The file path to a T1 pre-contrast MRI image 
+                           used for normalization (default: '').
+          imaging_protocol: The imaging protocol used for the MRI data 
+                           ('axial' or 'sagittal'). (default: 'axial')
+          side: Only if imaging_protocol='sagittal': The side of the breast to analyze ('left' or 'right'). 
+                (default: None)
+            breast_center: (Optional) The pre-defined center of the breast region 
+                          (default: 0). If 0, the function will automatically detect 
+                          the breast center for proper cropping of the image if needed.
+          debug: (Optional) A flag to enable debug mode, which displays visualizations 
+                 of the preprocessing steps (default: False).
+          order: (Optional) The order in which the loaded channels are stacked 
+                 in the output array (default: 1).
+    
+      Returns:
+          A tuple containing:
+              * A preprocessed 3D array with the stacked channels as the last dimension.
+              * A tuple representing the original shape of the first loaded channel.
+    
+      Raises:
+          FileNotFoundError: If any of the specified MRI files are not found.
+    """  
+    try:
+        hdr = nib.load(all_subject_channels[0])
+        t1post = hdr.get_fdata()
+    except (FileNotFoundError, OSError):
+        print('File not found or damaged..')
+        return None, None
+    try:    
+        slope1 = nib.load(all_subject_channels[1]).get_fdata()
+    except (FileNotFoundError, OSError):
+        print('File not found or damaged..')
+        return None, None
+    try:
+        slope2 = nib.load(all_subject_channels[2]).get_fdata()          
+    except (FileNotFoundError, OSError):
+        print('File not found or damaged..')
+        return None, None
+    
+    
     t1post_shape = hdr.shape
-    slope1 = nib.load(all_subject_channels[1]).get_fdata()
-    slope2 = nib.load(all_subject_channels[2]).get_fdata()    
+  
     shape = t1post.shape    
     resolution = np.diag(hdr.affine)
     new_res = np.array([resolution[0], 0.4, 0.4])
@@ -215,9 +264,9 @@ def load_and_preprocess(all_subject_channels, T1_pre_nii_path='',side='left', im
     
     # Target resolution in sagittal is ~ 0.4 x 0.4
     print('resampling to a resolution of 0.4 x 0.4mm..')
-    t1post = resize(t1post, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect', order=1)
-    slope1 = resize(slope1, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect', order=1)
-    slope2 = resize(slope2, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect', order=order)    
+    t1post = resize(t1post, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect')
+    slope1 = resize(slope1, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect')
+    slope2 = resize(slope2, output_shape=target_shape, preserve_range=True, anti_aliasing=True, mode='reflect')    
        
     
     print('cropping/padding to size 512 x 512 pixels..')    
@@ -235,19 +284,22 @@ def load_and_preprocess(all_subject_channels, T1_pre_nii_path='',side='left', im
         
     
     if breast_center == 0:
-        background = np.percentile(t1post, 75)
+        
         # Find chest:
         if imaging_protocol == 'axial':
             chest_slice = t1post[t1post.shape[0]//2]
+            background = np.percentile(chest_slice, 75)
+
         elif imaging_protocol == 'sagittal':
             if side == 'right':
-                chest_slice = t1post[0]
+                chest_slice = t1post[1] # Sometimes last or first slice is empty...
             elif side == 'left':
-                chest_slice = t1post[-1]
-
+                chest_slice = t1post[-2] # Sometimes last or first slice is empty...
+            background = np.percentile(chest_slice, 75)
+            
         # Find chest:
         chest_slice = scipy.ndimage.gaussian_filter(chest_slice, sigma=2)
-        chest_slice_bin = np.array(morphology.opening(chest_slice > background, np.ones((4,4))), 'int')
+        chest_slice_bin = np.array(morphology.opening(chest_slice > background, np.ones((4,4))), 'int')        
         chest_vector = np.max(chest_slice_bin, 1)
         breast_start = np.argwhere(chest_vector > 0)[-1][0]
         breast_start = breast_start - 125  # I see the chest middle is always further than the sides...
@@ -285,7 +337,7 @@ def load_and_preprocess(all_subject_channels, T1_pre_nii_path='',side='left', im
         plt.imshow(axial_max_projection_bin, aspect='auto'); plt.title('axial_max_projection > background')
         plt.subplot(r,c,5)
         plt.title(f'x1:{breast_start}, x:{breast_end}. --> [{start} : {end}]')
-        plt.imshow(np.rot90(t1post[t1post.shape[0]//2,start:end]), vmax=np.percentile(t1post, 97), vmin=-100, cmap='gray')
+        plt.imshow(np.rot90(t1post[t1post.shape[0]//2,start:end]), vmax=np.percentile(t1post, 97), vmin=0, cmap='gray')
         plt.xticks([]); plt.yticks([])
         plt.xlabel('Cropped image at resolution 0.4mm')
         plt.subplot(r,c,6)
