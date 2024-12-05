@@ -8,14 +8,22 @@ This repository contains a pre-trained convolutional neural network for breast c
 # Installation
 
 Code runs in the following tensorflow vesions (tested on colab): 
-2.17.0*; 2.16.1*; 2.15.0*; 2.10.0; 2.9.0; 2.8.4; 2.0.0 
-*recommended for faster inference.
+<br/>2.17.0*; 2.16.1*; 2.15.0*; 2.10.0; 2.9.0; 2.8.4; 2.0.0 
+<br/>*recommended for faster inference.
 
 google colab notebook provided for running demo on a public released axial MRI (see below Contents of project).
 
 yaml file for installing a conda environment for tensorflow 2.0.0 provided
 
 Docker container in the works...
+
+# Run on Google Colab
+
+To run a demo on the public dataset present, simply run the following lines on a google colab Jupiter notebook (make sure to change runtime type to give access to GPUs for faster inference).
+
+<br/>`!git clone -b develop https://github.com/lkshrsch/BreastCancerDiagnosisMRI.git`
+<br/>`%run BreastCancerDiagnosisMRI/Make_Prediction_on_MRI.py`
+
 
 # Contents of project: 
 
@@ -34,7 +42,7 @@ University (https://sites.duke.edu/mazurowski/resources/breast-cancer-mri-datase
 **model/**
 
 * This directory stores the trained model for breast cancer diagnosis:
-    * `CNN_weights.npy` - This file contains the weights for a Convolutional Neural Network (CNN).
+    * `pretrained_model_weights.npy` - This file contains the weights for a Convolutional Neural Network (CNN).
 
 *Model Architecture*
 The breast cancer detection model is a UNet architecture with the following specifications:
