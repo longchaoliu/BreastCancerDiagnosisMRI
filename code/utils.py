@@ -40,6 +40,7 @@ from tensorflow.keras import regularizers
 import pandas as pd
 from numpy.random import seed
 seed(42)
+tf.random.set_seed(42)
 
 import scipy
 from skimage import morphology
@@ -116,7 +117,7 @@ def add_family_hx(df, clinical):
 
 
 def create_convolution_block(input_layer, n_filters, kernel=(3, 3), padding='same', strides=(1, 1), L2=0):
-
+    
     layer = Conv2D(n_filters, kernel, padding=padding, strides=strides, kernel_regularizer=regularizers.l2(L2))(input_layer)
     layer = BatchNormalization()(layer)
 
@@ -129,10 +130,20 @@ def FocalLoss(y_true, y_pred):
     term_1 = y_true[:,1] * tf.keras.backend.pow(1 - y_pred[:,1],5) * tf.keras.backend.log(y_pred[:,1] + tf.keras.backend.epsilon())   
     return -tf.keras.backend.mean(term_0 + term_1, axis=0)
 
+def FocalLoss_5_0(y_true, y_pred): 
+    gamma_pos = 1 # on minority class, focus on both easy and hard examples
+    gamma_neg = 5 # on majority class with abundance of easy examples, focus only on hard examples
+    y_pred = tf.keras.backend.clip(y_pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())
+    term_0 = (1 - y_true[:,1]) * tf.keras.backend.pow(y_pred[:,1],gamma_neg) * tf.keras.backend.log(1 - y_pred[:,1] + tf.keras.backend.epsilon())  
+    term_1 = y_true[:,1] * tf.keras.backend.pow(1 - y_pred[:,1],gamma_pos) * tf.keras.backend.log(y_pred[:,1] + tf.keras.backend.epsilon())   
+    return -tf.keras.backend.mean(term_0 + term_1, axis=0)
 
 def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2), deconvolution=True,
                       depth=4, n_base_filters=32, activation_name="softmax", L2=0, USE_CLINICAL=False):
         """ Simple version, padding 'same' on every layer, output size is equal to input size. Has border artifacts and checkerboard artifacts """
+        
+        tf.random.set_seed(42)
+
         inputs = Input(input_shape)
         levels = list()
         current_layer = Conv2D(n_base_filters, (1, 1))(inputs)
@@ -163,8 +174,10 @@ def UNet_v0_2D_Classifier(input_shape =  (512, 512,3), pool_size=(2, 2), deconvo
 
         
         else:
-            act = tf.keras.layers.Dense(2, activation=activation_name)(current_layer)
-            model = Model(inputs=[inputs], outputs=act)
+            current_layer = tf.keras.layers.Dense(16, activation='relu')(image_features)
+            act = tf.keras.layers.Dense(2, activation=activation_name)(image_features)
+
+            model = Model(inputs=inputs, outputs=act)
 
         return model
     

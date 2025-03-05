@@ -62,6 +62,8 @@ from skimage.transform import resize
 
 from utils import load_and_preprocess
 
+# scanID = scan
+# MASTER = Data_description
 def load_data_prediction(scanID ,labels, MASTER, USE_CONTRALATERAL, USE_PREVIOUS):
     
     
@@ -191,7 +193,10 @@ def make_prediction_whole_scan(model, all_data, clinic_info_exam, USE_CONTRALATE
         slice_preds.append(yhat[0,1])
     return slice_preds
 
-
+# scans_list = scans_validation
+# Data_description = MASTER, NAME
+# OUT = OUTPUT_PATH
+# name = 'VAL'
 def get_results_on_dataset(model, scans_list, labels, Data_description, NAME, OUT, USE_CLINICAL, USE_CONTRALATERAL, USE_PREVIOUS, clinical_info, name='VAL'):
     
     if os.path.exists(OUT + NAME + '/{}_result.csv'.format(name)):
@@ -218,7 +223,7 @@ def get_results_on_dataset(model, scans_list, labels, Data_description, NAME, OU
         pathology = all_data[0]
         segmented_slice = all_data[1]
         
-        clinic_info_exam = 0
+        clinic_info_exam = []
         if USE_CLINICAL:
             clinic_info_exam = clinical_info.loc[clinical_info['scan_ID'] == scan,[u'Family Hx',u'Age',u'ETHNICITY_HISPANIC OR LATINO',u'ETHNICITY_NOT HISPANIC', u'ETHNICITY_UNKNOWN',u'RACE_ASIAN-FAR EAST/INDIAN SUBCONT',u'RACE_BLACK OR AFRICAN AMERICAN',u'RACE_NATIVE AMERICAN-AM IND/ALASKA',u'RACE_NATIVE HAWAIIAN OR PACIFIC ISL',u'RACE_UNKNOWN',u'RACE_WHITE']].values
 
@@ -631,7 +636,7 @@ def train_session(NAME, OUT, model, partition, DATA_PATH, training_generator, va
                                                     mode='min', 
                                                     baseline=None, 
                                                     restore_best_weights=False)
-
+            
     # Train model on dataset
     history = model.fit_generator(generator=training_generator,
                                 validation_data=validation_generator,
@@ -642,7 +647,8 @@ def train_session(NAME, OUT, model, partition, DATA_PATH, training_generator, va
                                 epochs = EPOCHS,
                                 shuffle=True,
                                 #class_weight = {0:1., 1:CLASS_WEIGHT},
-                                callbacks=[Custom_History, csv_logger, my_custom_checkpoint, myEarlyStop])
+                                callbacks=[Custom_History, csv_logger, my_custom_checkpoint, myEarlyStop]), #
+                                           # tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)])
     
     
     plt.figure(figsize=(5,15))
