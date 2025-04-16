@@ -7,24 +7,8 @@ Created on Tue Oct  8 13:09:02 2024
 """
 
 
-# GPU = 2
-import tensorflow as tf
-# if tf.__version__[0] == '1':
-#     config = tf.ConfigProto()
-#     config.gpu_options.allow_growth = True
-#     config.gpu_options.visible_device_list="0"
-#     tf.keras.backend.set_session(tf.Session(config=config))
 
-# elif tf.__version__[0] == '2':
-#     gpus = tf.config.experimental.list_physical_devices('GPU')
-#     if gpus:
-#       # Restrict TensorFlow to only use the first GPU
-#       try:
-#         tf.config.experimental.set_visible_devices(gpus[GPU], 'GPU')
-#         tf.config.experimental.set_memory_growth(gpus[GPU], True)
-#       except RuntimeError as e:
-#         # Visible devices must be set at program startup
-#         print(e)
+import tensorflow as tf
 
 import os
 import numpy as np
@@ -35,39 +19,12 @@ from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
 from skimage.transform import resize
 
-#%%   Data handling functions should be imported from utils and should be the new versions
-
-# def load_and_preprocess(all_subject_channels, T1_pre_nii_path):
-#     t1post = nib.load(all_subject_channels[0]).get_data()
-#     slope1 = nib.load(all_subject_channels[1]).get_data()
-#     slope2 = nib.load(all_subject_channels[2]).get_data()    
-    
-#     if t1post.shape[1] != 512:
-#         output_shape = (t1post.shape[0],512,512)
-#         t1post = resize(t1post, output_shape=output_shape, preserve_range=True, anti_aliasing=True, mode='reflect')
-#         slope1 = resize(slope1, output_shape=output_shape, preserve_range=True, anti_aliasing=True, mode='reflect')
-#         slope2 = resize(slope2, output_shape=output_shape, preserve_range=True, anti_aliasing=True, mode='reflect')
-
-#     p95 = np.percentile(nib.load(T1_pre_nii_path).get_data(),95)
-        
-#     t1post = t1post/p95    
-#     slope1 = slope1/p95    
-#     slope2 = slope2/p95    
-
-#     t1post = t1post/float(40)
-#     slope1 = slope1/float(0.3)
-#     slope2 = slope2/float(0.12)     
-
-#     return t1post, slope1, slope2
-
 from utils import load_and_preprocess
 
-# scanID = scan
-# MASTER = Data_description
 def load_data_prediction(scanID ,labels, MASTER, USE_CONTRALATERAL, USE_PREVIOUS):
     
     
-    "Takes scanIDs (not paths) and loads raw MRIs from /home/deeperthought/kirby_MSK/alignedNii-Nov2019/, preprocesses and returns"
+    "Takes scanIDs (not paths) and loads raw MRIs from /add/data/path/, preprocesses and returns"
     exam = scanID[:-2]
     patient = scanID[:20]
     side = 'right'
@@ -77,8 +34,8 @@ def load_data_prediction(scanID ,labels, MASTER, USE_CONTRALATERAL, USE_PREVIOUS
         contra_side = 'right'
     pathology = labels[scanID]
     
-    MRI_PATH = '/home/deeperthought/kirby_MSK/alignedNii-Nov2019/'
-    MRI_ALIGNED_HISTORY_PATH = '/home/deeperthought/kirbyPRO/saggital_Nov2019_alignedHistory/'
+    MRI_PATH = ''
+    MRI_ALIGNED_HISTORY_PATH = ''
     
     segmentation_GT = MASTER.loc[MASTER['Scan_ID'] == scanID, 'Segmentation_Path'].values[0]
     contralateral_available = MASTER.loc[MASTER['Scan_ID'] == scanID, 'Contralateral Available'].values[0]
@@ -193,10 +150,7 @@ def make_prediction_whole_scan(model, all_data, clinic_info_exam, USE_CONTRALATE
         slice_preds.append(yhat[0,1])
     return slice_preds
 
-# scans_list = scans_validation
-# Data_description = MASTER, NAME
-# OUT = OUTPUT_PATH
-# name = 'VAL'
+
 def get_results_on_dataset(model, scans_list, labels, Data_description, NAME, OUT, USE_CLINICAL, USE_CONTRALATERAL, USE_PREVIOUS, clinical_info, name='VAL'):
     
     if os.path.exists(OUT + NAME + '/{}_result.csv'.format(name)):
@@ -214,7 +168,7 @@ def get_results_on_dataset(model, scans_list, labels, Data_description, NAME, OU
     TOT = len(scans_list)
     
     for scan in scans_list:
-        #scan = scan[:31]
+
         N += 1
         print('{}/{}'.format(N,TOT))
     
@@ -310,7 +264,7 @@ def get_results_on_dataset(model, scans_list, labels, Data_description, NAME, OU
     
            
 
-#%% Clinical Info functions  ---  Probably should make a data_utils own library
+#%% Clinical Info functions  
         
 def add_age(df, clinical):
   ages = clinical['Unnamed: 1_level_0']
@@ -349,7 +303,7 @@ def add_ethnicity_oneHot(df, clinical):
   return df2
 
 def add_ethnicity(df, clinical):
-  #clinical.columns
+ 
   ethn = clinical['Unnamed: 4_level_0']['ETHNICITY']
   race = clinical['Unnamed: 3_level_0']['RACE']
   DEIDs = clinical['Unnamed: 0_level_0']['DE-ID']
@@ -413,7 +367,7 @@ def interleave_two_lists(lst1, lst2):
 
 #%% 
 
-class DataGenerator_classifier(tf.keras.utils.Sequence): # inheriting from Sequence allows for multiprocessing functionalities
+class DataGenerator_classifier(tf.keras.utils.Sequence): 
     'Generates data for Keras'
     def __init__(self, list_IDs,labels,clinical_info, data_path='', batch_size=4, dim=(512,512), n_channels=3,
                  n_classes=2, shuffledata=True, do_augmentation=True, use_clinical_info=False, 
@@ -495,22 +449,7 @@ class DataGenerator_classifier(tf.keras.utils.Sequence): # inheriting from Seque
 
             y[i] = self.labels[ID.split('/')[-1][:31]]
             
-                
-#            if self.use_contralateral:
-#                if self.data_description.loc[self.data_description['Scan_ID'] == ID[:31], 'Contralateral Available'].values[0] == 1:
-#                    X[i,:,:,3:6] = np.load(self.data_path.replace('X','Contra') + ID, allow_pickle=True)   # Here we add the path. ID can be the path
-#
-#            if self.use_previous:
-#                if self.data_description.loc[self.data_description['Scan_ID'] == ID[:31], 'Previous Available'].values[0] == 1:
-#                    X[i,:,:,-3:] = np.load(self.data_path.replace('X','Previous') + ID, allow_pickle=True)   # Here we add the path. ID can be the path
-
-            # if not np.isfinite(X[i]).all():  # remove after Ive checked all scans
-            #     X[i] = np.zeros((X[i].shape))
-
-#        if np.isnan(x[0]).any():
-#            sys.exit(0)
-        #assert not np.any(np.isnan(X)), 'NaNs found in data!!!'
-
+               
         X[np.isnan(X)] = 0
         
         if self.do_augmentation:
@@ -621,8 +560,6 @@ def train_session(NAME, OUT, model, partition, DATA_PATH, training_generator, va
     tf.keras.utils.plot_model(model, to_file=OUT + NAME + '/DGNS_Model.png', show_shapes=True)
     training_generator.clinical_info.to_csv(OUT + NAME + '/Clinical_Data_Train_Val.csv', index=False)
 
-    #print('Train malignants={}, Total={}'.format(np.sum([labels[x[:31]] for x in training_generator.list_IDs]), len(training_generator.list_IDs)))
-    #print('Val malignants={}, Total={}'.format(np.sum([labels[x[:31]] for x in validation_generator.list_IDs]), len(validation_generator.list_IDs)))
     
     csv_logger = tf.keras.callbacks.CSVLogger(OUT+NAME + '/csvLogger.log', 
                                          separator=',', 

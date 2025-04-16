@@ -92,7 +92,7 @@ def load_tfrecord_dataset(tfrecord_path, batch_size):
 
 partition = np.load("/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/sessions/DATA/New_data/10%/new_data_10%.npy", allow_pickle=True).item()
 labels = np.load("/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/sessions/DATA/New_data/10%/new_data_10%_labels.npy", allow_pickle=True).item()
-MRI_PATH = '/home/deeperthought/kirby_MSK/alignedNii-Nov2019/'
+MRI_PATH = ''
 DTYPE = 'float16'
 PARTITION = 'validation'
 
@@ -107,9 +107,6 @@ healthy_slices = defaultdict(list)
 
 [healthy_slices[x.split('/')[-1].split('.')[0][:31]].append(x.split('/')[-1].split('.')[0].split('_')[-1]) for x in partition[PARTITION] if x.split('/')[-1][:31] in healthy_scanIDs]
 
-# healthy_slices['MSKCC_16-328_1_00001_20061117_l']
-
-# healthy_slices = {x.split('/')[-1].split('.')[0][:31] : x.split('/')[-1].split('.')[0].split('_')[-1] for x in partition['train'] if x.split('/')[-1][:31] in healthy_scanIDs}
 
 tfrecord_path = '/media/HDD/example_data_MSKCC_16-328/Mixed_shuffled_10%data.tfrecord'
 

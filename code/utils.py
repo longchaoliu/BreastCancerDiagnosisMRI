@@ -7,25 +7,10 @@ Created on Wed Aug  7 15:39:18 2024
 """
 
 
-# GPU = 2
+
 
 import tensorflow as tf
-# if tf.__version__[0] == '1':
-#     config = tf.ConfigProto()
-#     config.gpu_options.allow_growth = True
-#     config.gpu_options.visible_device_list="0"
-#     tf.keras.backend.set_session(tf.Session(config=config))
 
-# elif tf.__version__[0] == '2':
-#     gpus = tf.config.experimental.list_physical_devices('GPU')
-#     if gpus:
-#       # Restrict TensorFlow to only use the first GPU
-#       try:
-#         tf.config.experimental.set_visible_devices(gpus[GPU], 'GPU')
-#         tf.config.experimental.set_memory_growth(gpus[GPU], True)
-#       except RuntimeError as e:
-#         # Visible devices must be set at program startup
-#         print(e)
         
 import numpy as np
 import matplotlib.pyplot as plt

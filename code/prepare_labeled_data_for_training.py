@@ -32,14 +32,13 @@ from skimage.transform import resize
 
 #%%    USER INPUT
 
-MRI_PATH = '/home/deeperthought/kirby_MSK/alignedNii-Nov2019/'
+MRI_PATH = '/path/to/alignedNii-Nov2019/'
 
 MASTER = pd.read_csv('/home/deeperthought/Projects/MSKCC_Data_Organization/data/Data_Partitions.csv')
-# RISK = pd.read_csv('/home/deeperthought/Projects/MSKCC_Data_Organization/data/Data_ExamHistory_Labels.csv')
 
 RISK = pd.read_csv('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/metadata/curated/pathology.csv')
 
-OUTPUT_FOLDER_2D = '/media/HDD/Diagnosis_2D_slices/X_2.5D/' #'/home/deeperthought/kirbyPRO/Saggittal_Full_Slices/2D_slices/X/'
+OUTPUT_FOLDER_2D = '/home/deeperthought/kirbyPRO/Saggittal_Full_Slices/2D_slices/X/'
 OUTPUT_SEGMENTATIONS_2D = '/home/deeperthought/kirbyPRO/Saggittal_segmentations_clean/2D/'
 
 NEIGHBOR_SLICES = 1
@@ -60,26 +59,6 @@ Instead use the spreadsheet CONVERT_SLICES  to extract new slices. These will ha
 '''
 
 
-
-# RISK.to_csv('/home/deeperthought/Projects/Diagnosis_breast_cancer_MRI_github/develop/metadata/curated/pathology.csv')
-
-
-
-''' 
-Replace all this stuff with just a cleaned input spreadsheet, for sagittal, axial, Duke, JHU...
-
-Input sheet has to have:
-    
-Data path
-Pathology
-Slice number of cancer
-
-non-segmented cancers shouldn't be in the spreadsheet 
-unclear pathology shouldn't be in the sheet
-unclear BIRADS but with pathology entry are OK
-screen-detected cancers should not be in the sheet
-
-'''
 #%% Available scans
 
 AVAILABLE_DATA = pd.read_csv('/home/deeperthought/Projects/MSKCC_Data_Organization/data/aligned-Nov2019_Triples.csv')
@@ -92,8 +71,6 @@ len(EXAMS)
 SCANIDS = list(set(AVAILABLE_DATA.loc[AVAILABLE_DATA['Exam'].isin(EXAMS), 'Scan_ID'].values))
 
 SCANIDS = set(SCANIDS).intersection(set(RISK['Scan_ID'].values))
-
-
 
 
 partition_sagittal = np.load("/home/deeperthought/Projects/DGNS/2D_Diagnosis_model/DATA/Data.npy", allow_pickle=True).item()
@@ -278,8 +255,6 @@ for SUBJECT_INDEX in range(TOT): #TOT
         else:
             continue
 
-    #pathology = RISK.loc[RISK['Scan_ID'] == scanID, 'Pathology'].values[0]
-
 
     #-------------------- Get paths of DCE-MRI. T1 if not normalized before  ---------------------------------
 
@@ -308,13 +283,11 @@ for SUBJECT_INDEX in range(TOT): #TOT
     #-------------------- Get pathology. If cancer, get slice number, else random slice ---------------------------------
         'Dont do this anymore. Load prepared sheet with slice numbers.'
 
-    # pathology = RISK.loc[RISK['Scan_ID'] == scanID, 'Pathology'].values[0]
  
     if pathology == 'Malignant':
         FOLDER = 'MALIGNANT'
         if scanID in segmented_scanid:
     
-        #segmentation_available = MASTER.loc[MASTER['Scan_ID'] == scanID, 'Segmented'].values[0] == 1
 
         #if segmentation_available: # What do I do with malignants that have no segmentation? These are not part of the training set of this pipeline!
             segmentation_path = MASTER.loc[MASTER['Scan_ID'] == scanID, 'Segmentation_Path'].values[0]    
@@ -335,17 +308,5 @@ for SUBJECT_INDEX in range(TOT): #TOT
     for i in range(len(selected_slices)):
         #if not os.path.exists(OUTPUT_FOLDER + '/{}_{}.npy'.format(scanID, selected_slices[i])):
         np.save(f'{OUTPUT_FOLDER}/{FOLDER}/{scanID}_{selected_slices[i]}.npy', X[selected_slices[i]-NEIGHBOR_SLICES:selected_slices[i]+NEIGHBOR_SLICES+1])
-                
-        # if segmentation_available:  
-        # #     if not os.path.exists(OUTPUT_SEGMENTATIONS + '/{}_{}.npy'.format(scanID, selected_slices[i])):
-    
-        # #         groundtruth_crop = groundtruth[selected_slices[i]]
-        #     np.save(OUTPUT_SEGMENTATIONS + '/{}_{}.npy'.format(scanID, selected_slices[i]), groundtruth_crop)
-            
-                
+             
         
-        
-    # sl = np.load('/media/HDD/Diagnosis_2D_slices/X/MSKCC_16-328_1_14197_20100415_l_24.npy', allow_pickle=True)
-
-    # sl.min()
-    # plt.imshow(sl[0,:,:,2])
