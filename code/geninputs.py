@@ -15,12 +15,12 @@ from toolbox import ProgressBar, get_logger
 Progress = None
 manager = Manager()
 progress_queue = manager.Queue()
-LOGGER = get_logger('06_genInputs', '/FL_system/data/logs/')
+LOGGER = get_logger('06_genInputs', 'data/logs/')
 
-LOAD_DIR = '/FL_system/data/coreg/'
-SAVE_DIR = '/FL_system/data/inputs/'
+LOAD_DIR = 'data/coreg/'
+SAVE_DIR = 'data/inputs/'
 DEBUG = 0
-TEST = False
+TEST = True
 N_TEST = 40
 PARALLAL = True
 PROGRESS = False
@@ -54,13 +54,14 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
     # Pass the progress queue to the target function
     target = partial(progress_wrapper, target=target, progress_queue=progress_queue, *args, **kwargs)
 
+    results = [target(item) for item in items]
     # Run the target function with a progress bar
-    if Parallel:
-        with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-            futures = [executor.submit(target, item, *args, **kwargs) for item in items]
-            results = [future.result() for future in futures]
-    else:
-        results = [target(item) for item in items]
+    # if Parallel:
+    #     with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+    #         futures = [executor.submit(target, item, *args, **kwargs) for item in items]
+    #         results = [future.result() for future in futures]
+    # else:
+    #     results = [target(item) for item in items]
 
     # Close the progress bar
     if PROGRESS:
@@ -86,26 +87,35 @@ def progress_updater(queue, progress_bar):
 
         queue.task_done()
 
+from datetime import datetime
+
+def hms_to_s(hms):
+    hms = (hms or '').split('.')[0].zfill(6)
+    return int(hms[0:2])*3600 + int(hms[2:4])*60 + int(hms[4:6])
+
+def estimate_phase_times_seconds(df):
+    # df: rows for one SessionID, sorted in acquisition order
+    # expects columns: AcqDate (YYYYMMDD), AcqTime (HH:MM:SS or HHMMSS), ScanDur (µs or 'Unknown')
+    starts = []
+    mids = []
+    for _, r in df.iterrows():
+        acq_time = (r['AcqTime'] or '').replace(':','')
+        start_s = hms_to_s(acq_time)
+        dur_s = float(r['ScanDur'])/1e6 if isinstance(r['ScanDur'], (int, float)) else None
+        mid_s = start_s + (dur_s/2.0 if dur_s else 0.0)
+        starts.append(start_s)
+        mids.append(mid_s)
+    t0 = mids[0]
+    return [max(0.0, m - t0) for m in mids]  # seconds relative to pre
+
+    
 def generate_slopes(SessionID):
     # Should generate 2 slopes
     # Slope 1 - between 00 and 01
     # Slope 2 - between 01 and 0X
-    if os.path.exists(SAVE_DIR + f'/{SessionID}'):
-        LOGGER.warning(f'{SessionID} | Directory already exists')
-        # Check for files in the directory
-        if len(os.listdir(SAVE_DIR + f'/{SessionID}')) < 3:
-            LOGGER.warning(f'{SessionID} | Directory does not have necessary files, reprocessing')
-            os.rmdir(SAVE_DIR + f'/{SessionID}')
-        else:
-            LOGGER.debug(f'{SessionID} | Directory exists and has necessary files, skipping')
-            return
-    else:
-        LOGGER.debug(f'{SessionID} | Creating saving directory for inputs')
-    os.mkdir(SAVE_DIR + f'/{SessionID}')
-
     LOGGER.debug(f'Generating slopes for session: {SessionID}')
     
-    Fils = glob.glob(f'{LOAD_DIR}/{SessionID}/*.nii')
+    Fils = glob.glob(f'{LOAD_DIR}/11581013/*.nii.gz')
     Fils.sort()
     LOGGER.debug(f'{SessionID} | Files | {Fils} ')
     Data = Data_table[Data_table['SessionID'] == SessionID]
@@ -116,7 +126,7 @@ def generate_slopes(SessionID):
     if len(Data) != len(Fils):
         LOGGER.warning(f'{SessionID} | Different number of files and detected times')
         LOGGER.warning(f'{SessionID} | Analyzing timing spreadsheet to remove non-fat saturated (assumption!)')
-        Data = Data[Data['Series_desc'].str.contains('FS', na=False)].reset_index(drop=True)
+        # Data = Data[Data['Series_desc'].str.contains('FS', na=False)].reset_index(drop=True)
     if not len(Data) == len(Fils):
         LOGGER.error(f'{SessionID} | ERROR: different sizes cannot be fixed through Fat saturation')
         return
@@ -126,38 +136,36 @@ def generate_slopes(SessionID):
     #LOGGER.debug(f'{SessionID} | Trigger Time | {Data["TriTime"].values}')
     #LOGGER.debug(f'{SessionID} | Scan Duration | {Data["ScanDur"].values}')
     
-    # Check trigger time is not unkown for any of the scans
-    Times = [Data['TriTime'].iloc[ii] for ii in sorting] #Loading Times in ms
-    Scan_Duration = [Data['ScanDur'].iloc[ii] for ii in sorting] #Loading Scan Duration in us
-    if 'Unknown' in Times[1:]:
-        LOGGER.error(f'{SessionID} | Trigger time is unknown for the post scan, cannot calculate slopes')
-        return
+    # Compose phase times in seconds
+    Data_sorted = Data.iloc[sorting].reset_index(drop=True)
+    post_tris = Data_sorted['TriTime'][1:].values
+    # If any post scan has unknown TriTime, fallback to estimating from AcqTime/ScanDur
+    if any([(t == 'Unknown') for t in post_tris]):
+        LOGGER.warning(f"{SessionID} | Post-scan TriTime unknown. Estimating phase times from AcqTime/ScanDur.")
+        try:
+            Times = estimate_phase_times_seconds(Data_sorted)
+        except Exception as e:
+            LOGGER.error(f'{SessionID} | Failed to estimate phase times from AcqTime/ScanDur')
+            LOGGER.error(f'{SessionID} | {e}')
+            return
     else:
-        # Check for scan duration us known for the pre scan
-        if Scan_Duration[0] == 'Unknown':
-            LOGGER.warning(f'{SessionID} | Scan duration is unknown for the pre scan, attempting to estimate from acquision times')
-            try:
-                AcqTime = [Data['AcqTime'].iloc[ii] for ii in sorting] #Loading AcqTime in hh:mm:ss 
-                Times = [float(T)/1000 for T in Times] # Converting to seconds
-                AcqTime = [int(t.split(':')[0])*3600 + int(t.split(':')[1])*60 + int(t.split(':')[2]) for t in AcqTime] # Converting to seconds
-                Times[0] = float(AcqTime[0]) - (float(AcqTime[1])) # Estimating the time of the pre-scan
-
-            except Exception as e:
-                LOGGER.error(f'{SessionID} | Error loading acquisition times')
-                LOGGER.error(f'{SessionID} | {e}')
-                return
-        else:
-            try:
-                ScanDuration = [Data['ScanDur'].iloc[ii] for ii in sorting] #Scan Duration in us
-                if Times[0] == 'Unknown':
-                    Times[0] = float(Times[1]) - (float(ScanDuration[0])/1000)
-                # Converting to seconds
-                Times = [float(T)/1000 for T in Times]
-
-            except Exception as e:
-                LOGGER.error(f'{SessionID} | Error loading times')
-                LOGGER.error(f'{SessionID} | {e}')
-                return
+        # Use TriTime directly (ms -> s), estimate pre if needed
+        try:
+            Times = [float(t)/1000.0 if t != 'Unknown' else 'Unknown' for t in Data_sorted['TriTime'].values]
+            if Times[0] == 'Unknown':
+                # Prefer ScanDur pre to back-calculate pre time from first post
+                scan_dur_us = Data_sorted['ScanDur'].iloc[0]
+                if isinstance(scan_dur_us, (int, float)):
+                    Times[0] = max(0.0, float(Times[1]) - float(scan_dur_us)/1000.0)
+                else:
+                    # Fallback to midpoint difference from AcqTime
+                    acq_hms = [(x or '').replace(':','') for x in Data_sorted['AcqTime'].values]
+                    acq_s = [int(t[0:2])*3600 + int(t[2:4])*60 + int(t[4:6]) if len(t) >= 6 else 0 for t in acq_hms]
+                    Times[0] = max(0.0, float(acq_s[0]) - float(acq_s[1]))
+        except Exception as e:
+            LOGGER.error(f'{SessionID} | Error processing TriTime fallback logic')
+            LOGGER.error(f'{SessionID} | {e}')
+            return
             
     LOGGER.debug(f'{SessionID} | Times | {Times}')
     
@@ -201,6 +209,9 @@ def generate_slopes(SessionID):
         D[:,:,:,ii] = data0
     D[np.isnan(D)] = 0
 
+    LOGGER.debug(f'{SessionID} | Creating saving directory for inputs')
+    os.mkdir(SAVE_DIR + f'/{SessionID}')
+
     ###################################
     # Calculating slope 1 (enhancement)
     LOGGER.debug(f'{SessionID} | Starting slope 1 calculation')
@@ -219,7 +230,7 @@ def generate_slopes(SessionID):
     LOGGER.debug(f'{SessionID} | Slope 1 shape: {slope1.shape}')
     LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(slope1.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope1.nii')
+    nib.save(nib.Nifti1Image(slope1.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope1.nii.gz')
     LOGGER.debug(f'{SessionID} | Saved slope 1')
 
     ###################################
@@ -240,7 +251,7 @@ def generate_slopes(SessionID):
     LOGGER.debug(f'{SessionID} | Slope 2 shape: {slope2.shape}')
     LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(slope2.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope2.nii')
+    nib.save(nib.Nifti1Image(slope2.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope2.nii.gz')
     LOGGER.debug(f'{SessionID} | Saved slope 2')
 
     ###################################
@@ -254,7 +265,7 @@ def generate_slopes(SessionID):
     LOGGER.debug(f'{SessionID} | Post contrast shape: {post.shape}')
     LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(post.astype('float32'), img.affine, img.header), SAVE_DIR + f'/{SessionID}/post.nii')
+    nib.save(nib.Nifti1Image(post.astype('float32'), img.affine, img.header), SAVE_DIR + f'/{SessionID}/post.nii.gz')
     LOGGER.debug(f'{SessionID} | Saved post contrast scan')
 
     ###################################
@@ -263,7 +274,7 @@ def generate_slopes(SessionID):
 
 if __name__ == '__main__':
     try:
-        Data_table = pd.read_csv('/FL_system/data/Data_table_timing.csv')
+        Data_table = pd.read_csv('/scratch/joyliu/code/BreastCancerDiagnosisMRI/data/Data_table_timing.csv')
     except:
         LOGGER.error('MISSING CRITICAL FILE | "data_table_timing.csv"')
         exit()
@@ -273,7 +284,7 @@ if __name__ == '__main__':
     if TEST:
         session = session[:N_TEST]
         Dirs = Dirs[:N_TEST]
-    session = Dirs
+
     N = len(Dirs)
     k = 0
     
@@ -283,8 +294,8 @@ if __name__ == '__main__':
     # Check if inputs have already been generated
     if os.path.exists(SAVE_DIR):
         print('Inputs already generated')
-        #print('To reprocess data, please remove /data/inputs')
-        #exit()
+        # print('To reprocess data, please remove /data/inputs')
+        # exit()
     else:
         # Create directory for saving inputs
         os.mkdir(SAVE_DIR)

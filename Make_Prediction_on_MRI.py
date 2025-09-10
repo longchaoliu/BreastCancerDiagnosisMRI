@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 import sys
 
 MODEL_WEIGHTS_PATH = '/model/pretrained_model_weights.npy'
+            
+T1_POST_PATH = "data/inputs/7A8rgvMkzi_20170511_091726/post.nii.gz"
+DCE_IN_PATH = "data/inputs/7A8rgvMkzi_20170511_091726/slope1.nii.gz"
+DCE_OUT_PATH = "data/inputs/7A8rgvMkzi_20170511_091726/slope2.nii.gz"            
 
-Ph2_PATH = "/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/11581013/11581013_Ph2_rigid.nii.gz"
-Ph5_PATH = "/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/11581013/11581013_Ph5_rigid.nii.gz"
-T1FS_PATH = "/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/11581013/11581013_T1FS.nii.gz"            
-
-T1_pre_nii_path = "/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/11581013/11581013_T1FS.nii.gz" # If data already normalized, no need for T1pre image
+T1_pre_nii_path = '' # If data already normalized, no need for T1pre image
 MODALITY = 'axial' # 'axial'
 SIDE = ''
 
@@ -40,9 +40,9 @@ if __name__ == '__main__':
     model.set_weights(loaded_weights) # no need to compile model as we are just doing inference.
     
     # Load and process data
-    all_subject_channels = [Ph2_PATH, 
-                            Ph5_PATH, 
-                            T1FS_PATH] 
+    all_subject_channels = [T1_POST_PATH, 
+                            DCE_IN_PATH, 
+                            DCE_OUT_PATH] 
     
     X, shape = load_and_preprocess(all_subject_channels, T1_pre_nii_path=T1_pre_nii_path, side=SIDE, imaging_protocol=MODALITY, debug=False)
     
@@ -52,19 +52,13 @@ if __name__ == '__main__':
           
     print('Data preprocessed.. model inference')    
     preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, verbose=1)[:,-1]
-    print('Pred stats | min:', float(np.min(preds)), 'max:', float(np.max(preds)), 'mean:', float(np.mean(preds)), 'std:', float(np.std(preds)))
-    if np.allclose(np.std(preds), 0.0):
-        print('WARNING: Predictions are flat across slices. Check normalization and channel ordering.')
 
     # preds = model.predict([X, np.tile(MODE_CLINICAL, (shape[0], 1))], batch_size=1, use_multiprocessing=True, workers=10, verbose=0)[:,-1]
     print('prediction done..')
     
-    global_prediction = float(np.max(preds))
-    max_slice = int(np.argmax(preds))
-    print(preds)
-    max_slice = 96
-
-
+    global_prediction = np.max(preds)
+    max_slice = np.argwhere(preds == global_prediction)[0][0]   
+    
     # Generate gradCAM for in-slice visualization
     print('Generating gradCAM heatmap..')
     heatmap, img, superimposed_img = generate_gradCAM_image(model, X[max_slice:max_slice+1], MODE_CLINICAL ,alpha = 0.30)   
@@ -81,7 +75,7 @@ if __name__ == '__main__':
     plt.figure(1)
     fig, ax = plt.subplots(4,1, sharex=True, figsize=(5,10))    
     
-    ax[0].set_title(f'{Ph2_PATH.split("/")[-1]}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{T1_POST_PATH.split("/")[-1]}\n P(cancer) = ' + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
@@ -110,7 +104,7 @@ if __name__ == '__main__':
     plt.figure(2)
     fig, ax = plt.subplots(1,4, figsize=(15,5))    
     
-    ax[0].set_title(f'{Ph2_PATH.split("/")[-1]}\n P(cancer) = '  + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
+    ax[0].set_title(f'{T1_POST_PATH.split("/")[-1]}\n P(cancer) = '  + str(np.round(global_prediction,3)) + f'\n Most suspicious slice: {max_slice}')
     ax[0].plot(preds)
     ax[0].vlines(max_slice,0,global_prediction,color=rgb_color)
     ax[0].set_aspect('auto')
