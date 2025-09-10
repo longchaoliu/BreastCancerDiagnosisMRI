@@ -18,7 +18,6 @@ Columns (at minimum):
 - AcqTime: acquisition time as HH:MM:SS
 - Series_desc: SeriesDescription
 - Modality
-- BodyPart
 - DicomPath: directory containing this series (first detected instance)
 
 This utility is conservative and resilient to mixed directory structures. It
@@ -89,18 +88,20 @@ def hhmmss_to_hh_mm_ss(hhmmss: str) -> Optional[str]:
         return None
 
 
-def extract_series_record(file_path: str, ds) -> Optional[Dict]:
+def extract_series_record(file_path: str, ds, accession: Optional[str]) -> Optional[Dict]:
     """Extract per-series metadata from a single instance."""
     try:
         modality = getattr(ds, 'Modality', None)
         if modality and str(modality).upper() != 'MR':
+            print(f"Skipping {file_path} because it is {modality} series")
             return None
 
         series_uid = getattr(ds, 'SeriesInstanceUID', None)
         study_uid = getattr(ds, 'StudyInstanceUID', None)
         patient_id = getattr(ds, 'PatientID', None)
         series_num = getattr(ds, 'SeriesNumber', None)
-        accession = getattr(ds, 'AccessionNumber', None)
+        if accession is None:
+            accession = getattr(ds, 'AccessionNumber', None)
 
         acq_date = getattr(ds, 'AcquisitionDate', None) or getattr(ds, 'StudyDate', None)
         acq_time = getattr(ds, 'AcquisitionTime', None) or getattr(ds, 'SeriesTime', None) or getattr(ds, 'ContentTime', None)
@@ -151,7 +152,8 @@ def extract_series_record(file_path: str, ds) -> Optional[Dict]:
             'DicomPath': file_path,
         }
         return record
-    except Exception:
+    except Exception as e:
+        print(f"Error extracting series record from {file_path}: {e}")
         return None
 
 
@@ -186,9 +188,16 @@ def get_yaib_series_dirs(accession: Optional[str]) -> List[str]:
         return dirs
     for sub in YAIB_SUBFOLDERS:
         root = os.path.join(base, sub)
-        if not os.path.exists(root):
+        accession_dir = os.path.join(root, accession)
+        if not os.path.exists(accession_dir):
             continue
-        dirs.extend(collect_series_dirs_under(root, accession))
+        for sdir in os.listdir(os.path.join(root, accession)):
+            series = os.path.join(root, accession, sdir)
+            if os.path.isdir(series):
+                for file in os.listdir(series):
+                    sample = find_first_dicom_file(os.path.join(series, file))
+                    if sample != None:
+                        dirs.append(sample)
     return dirs
 
 
@@ -204,21 +213,23 @@ def get_air_series_dirs(accession: Optional[str], directory: Optional[str]) -> L
 def scan_series_from_dirs(series_dirs: List[str]) -> List[Dict]:
     seen_series: set = set()
     records: List[Dict] = []
-    for sdir in tqdm(series_dirs):
+    for acc in tqdm(series_dirs):
         # sample = find_first_dicom_file(sdir)
         # if not sample:
         #     continue
-        ds = try_read_header(sdir)
-        if ds is None:
-            continue
-        series_uid = getattr(ds, 'SeriesInstanceUID', None)
-        if not series_uid or series_uid in seen_series:
-            continue
-        rec = extract_series_record(sdir, ds)
-        if rec is None:
-            continue
-        records.append(rec)
-        seen_series.add(series_uid)
+        sdirs = series_dirs[acc]
+        for sdir in sdirs:
+            ds = try_read_header(sdir)
+            if ds is None:
+                continue
+            series_uid = getattr(ds, 'SeriesInstanceUID', None)
+            if not series_uid or series_uid in seen_series:
+                continue
+            rec = extract_series_record(sdir, ds, accession=acc)
+            if rec is None:
+                continue
+            records.append(rec)
+            seen_series.add(series_uid)
     return records
 
 
@@ -259,15 +270,26 @@ def write_csv(records: List[Dict], output_path: str) -> None:
     cols = [
         'SessionID', 'Major', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID',
         'SeriesNumber', 'AccessionNumber', 'AcqDate', 'AcqTime', 'TriTime', 'ScanDur',
-        'Series_desc', 'Modality', 'BodyPart', 'DicomPath',
+        'Series_desc', 'Modality', 'DicomPath',
     ]
     df = df.reindex(columns=cols)
     
+    # This works for the original files from Wynton (aka if they were in AIR)
     metadata = pd.read_csv('/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/mri_series.csv')
     metadata = metadata[metadata['Orig Study UID'] == df.iloc[0]['StudyInstanceUID']]
-    df = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
-    df.to_csv(output_path, index=False)
-    print(f'Wrote timing table with {len(df)} rows to: {output_path}')
+    df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
+    if len(df_with_series_desc) == 0:
+        print(f'No series description found for {df.iloc[0]["StudyInstanceUID"]}')
+        
+        metadata = pd.read_csv(f'/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/{df.iloc[0]["AccessionNumber"]}/converted.csv')
+        first_row = list(metadata.columns)
+        cols = ['Series', 'File', 'Orig Series #', 'Series Desc']
+        metadata.columns = cols
+        metadata = pd.concat([pd.DataFrame([first_row], columns=cols), metadata],ignore_index=True)
+        df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
+    df_with_series_desc.to_csv(output_path, index=False)
+    
+    print(f'Wrote timing table with {len(df_with_series_desc)} rows to: {output_path}')
 
 
 def filter_records(records: List[Dict], accession: Optional[str], patient: Optional[str], session: Optional[str], path_substr: Optional[str]) -> List[Dict]:
@@ -300,6 +322,7 @@ def main():
     
     df = accessions.merge(directories, how='left')
     
+    acc_dicoms = {}
     # Stage 1: YAIB search (grouped by series)
     if args.filter_accession:
         series_dirs = get_yaib_series_dirs(args.filter_accession)
@@ -308,6 +331,7 @@ def main():
             directory = directories[directories['sample_name'] == args.filter_accession].iloc[0]['Directory']
             print(directory)
             series_dirs = get_air_series_dirs(args.filter_accession, directory=directory)
+        acc_dicoms[args.filter_accession] = series_dirs
         
 
     else:
@@ -318,9 +342,9 @@ def main():
                 directory = row['Directory']
                 # Stage 2: AIR extracted using metadata CSV
                 series_dirs = get_air_series_dirs(accession, directory=directory)
-            
-
-    records = scan_series_from_dirs(series_dirs)
+            acc_dicoms[accession] = series_dirs
+   
+    records = scan_series_from_dirs(acc_dicoms)
     if not records:
         print('No MR series found in provided roots.')
         return
