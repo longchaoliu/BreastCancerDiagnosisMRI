@@ -46,11 +46,13 @@ except Exception as exc:  # pragma: no cover
     sys.exit(1)
 
 
-ROOTS = [
-    '/mnt/shareddata/datasets/AIR/extracted/',
-    '/mnt/shareddata/datasets/YAIB-cohorts/AIR_API_Downloads/missing_breast_mri_feb9_24/',
-    '/mnt/shareddata/datasets/YAIB-cohorts/AIR_API_Downloads/chest_ct_breast_mr_missing',
+YAIB_BASE = '/mnt/shareddata/datasets/YAIB-cohorts/AIR_API_Downloads'
+YAIB_SUBFOLDERS = [
+    'missing_breast_mri_feb9_24',
+    'chest_ct_breast_mr_missing',
 ]
+AIR_EXTRACTED_ROOT = '/mnt/shareddata/datasets/AIR/extracted/'
+AIR_DIRS_CSV = '/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/full_studies_dirs.csv'
 
 OUTPUT_DIR = 'data'
 OUTPUT_PATH = f'{OUTPUT_DIR}/Data_table_timing.csv'
@@ -97,8 +99,6 @@ def extract_series_record(file_path: str, ds) -> Optional[Dict]:
         series_uid = getattr(ds, 'SeriesInstanceUID', None)
         study_uid = getattr(ds, 'StudyInstanceUID', None)
         patient_id = getattr(ds, 'PatientID', None)
-        series_desc = getattr(ds, 'SeriesDescription', None)
-        body_part = getattr(ds, 'BodyPartExamined', None)
         series_num = getattr(ds, 'SeriesNumber', None)
         accession = getattr(ds, 'AccessionNumber', None)
 
@@ -155,36 +155,70 @@ def extract_series_record(file_path: str, ds) -> Optional[Dict]:
         return None
 
 
-def scan_series(roots: List[str], path_substr: Optional[str] = None) -> List[Dict]:
-    """Walk roots, pick one instance per SeriesInstanceUID, and extract metadata.
-    Optionally restrict to directories containing path_substr.
-    """
-    seen_series: set = set()
-    records: List[Dict] = []
-    for root in roots:
+def find_first_dicom_file(dir_path: str) -> Optional[str]:
+    try:
+        for fname in os.listdir(dir_path):
+            fpath = os.path.join(dir_path, fname)
+            if not os.path.isfile(fpath):
+                continue
+            if fname.lower().endswith('.dcm') or fname.upper().startswith('IM') or fname.upper().startswith('MR') or is_probably_dicom(fpath):
+                return fpath
+    except Exception:
+        return None
+    return None
+
+
+def collect_series_dirs_under(root: str, accession: Optional[str]) -> List[str]:
+    series_dirs: List[str] = []
+    path = f"{root}/{accession}"
+    if not os.path.exists(path):
+        return series_dirs
+    filenames = os.listdir(path)
+    # Consider a directory a series if it contains at least one dicom-like file
+    series_dirs = [os.path.join(path, fn) for fn in filenames if fn.lower().endswith('.dcm')]
+    return series_dirs
+
+
+def get_yaib_series_dirs(accession: Optional[str]) -> List[str]:
+    dirs: List[str] = []
+    base = YAIB_BASE
+    if not os.path.exists(base):
+        return dirs
+    for sub in YAIB_SUBFOLDERS:
+        root = os.path.join(base, sub)
         if not os.path.exists(root):
             continue
-        filenames = os.listdir(f"{root}/{path_substr}")
+        dirs.extend(collect_series_dirs_under(root, accession))
+    return dirs
 
-        # Heuristic: prioritize files that look like DICOM
-        candidates = [f for f in filenames if f.lower().endswith('.dcm') or f.upper().startswith('IM') or f.upper().startswith('MR')]
-        if not candidates:
-            candidates = filenames
-        for fname in tqdm(candidates[:100]):
-            fpath = os.path.join(f"{root}/{path_substr}", fname)
-            ds = try_read_header(fpath)
-            if ds is None:
-                continue
-            series_uid = getattr(ds, 'SeriesInstanceUID', None)
-            if not series_uid:
-                continue
-            if series_uid in seen_series:
-                continue
-            rec = extract_series_record(fpath, ds)
-            if rec is None:
-                continue
-            records.append(rec)
-            seen_series.add(series_uid)
+
+def get_air_series_dirs(accession: Optional[str], directory: Optional[str]) -> List[str]:
+    dirs: List[str] = []
+    if not os.path.exists(AIR_EXTRACTED_ROOT):
+        return dirs
+
+    dirs.extend(collect_series_dirs_under(AIR_EXTRACTED_ROOT, accession=directory))
+    return dirs
+
+
+def scan_series_from_dirs(series_dirs: List[str]) -> List[Dict]:
+    seen_series: set = set()
+    records: List[Dict] = []
+    for sdir in tqdm(series_dirs):
+        # sample = find_first_dicom_file(sdir)
+        # if not sample:
+        #     continue
+        ds = try_read_header(sdir)
+        if ds is None:
+            continue
+        series_uid = getattr(ds, 'SeriesInstanceUID', None)
+        if not series_uid or series_uid in seen_series:
+            continue
+        rec = extract_series_record(sdir, ds)
+        if rec is None:
+            continue
+        records.append(rec)
+        seen_series.add(series_uid)
     return records
 
 
@@ -253,16 +287,40 @@ def filter_records(records: List[Dict], accession: Optional[str], patient: Optio
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Index DICOM MR series and build timing CSV')
-    parser.add_argument('--roots', nargs='*', default=ROOTS, help='Root directories to scan')
+    parser.add_argument('--accessions', default='/mnt/shareddata/users/joyliu/current/ReportAnalysis/converted_volumes/info/val_with_path_v5.csv')
     parser.add_argument('--output', default=OUTPUT_PATH, help='Output CSV path')
     parser.add_argument('--filter-accession', default=None, help='AccessionNumber to include')
     parser.add_argument('--filter-patient', default=None, help='PatientID to include')
     parser.add_argument('--filter-session', default=None, help='SessionID to include')
-    parser.add_argument('--filter-path-substr', default=None, help='Only include series whose path contains this substring')
     args = parser.parse_args()
 
-    roots = args.roots if args.roots else ROOTS
-    records = scan_series(roots, path_substr=args.filter_path_substr)
+    directories = pd.read_csv(AIR_DIRS_CSV)
+    accessions = pd.read_csv(args.accessions)
+    directories['sample_name'] = directories['Orig Acc #'].astype(str)
+    
+    df = accessions.merge(directories, how='left')
+    
+    # Stage 1: YAIB search (grouped by series)
+    if args.filter_accession:
+        series_dirs = get_yaib_series_dirs(args.filter_accession)
+        if len(series_dirs) == 0:
+            # Stage 2: AIR extracted using metadata CSV
+            directory = directories[directories['sample_name'] == args.filter_accession].iloc[0]['Directory']
+            print(directory)
+            series_dirs = get_air_series_dirs(args.filter_accession, directory=directory)
+        
+
+    else:
+        for row in df.iterrows():
+            accession = row['sample_name']
+            series_dirs = get_yaib_series_dirs(accession)
+            if len(series_dirs) == 0:
+                directory = row['Directory']
+                # Stage 2: AIR extracted using metadata CSV
+                series_dirs = get_air_series_dirs(accession, directory=directory)
+            
+
+    records = scan_series_from_dirs(series_dirs)
     if not records:
         print('No MR series found in provided roots.')
         return
