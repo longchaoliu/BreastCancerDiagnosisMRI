@@ -142,8 +142,8 @@ def extract_series_record(file_path: str, ds, accession: Optional[str]) -> Optio
             'SeriesInstanceUID': str(series_uid) if series_uid is not None else None,
             'StudyInstanceUID': str(study_uid) if study_uid is not None else None,
             'PatientID': str(patient_id) if patient_id is not None else None,
-            'SeriesNumber': int(series_num) if isinstance(series_num, (int, float)) else None,
-            'AccessionNumber': str(accession) if accession is not None else None,
+            'Orig Series #': int(series_num) if isinstance(series_num, (int, float)) else None,
+            'sample_name': str(accession) if accession is not None else None,
             'TriTime': tri_time_val,
             'ScanDur': scan_dur,
             'AcqDate': str(acq_date) if acq_date is not None else None,
@@ -263,30 +263,30 @@ def assign_major(records: List[Dict]) -> List[Dict]:
     return out
 
 
-def write_csv(records: List[Dict], output_path: str) -> None:
+def write_csv(records: List[Dict], output_path: str, metadata: pd.DataFrame) -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df = pd.DataFrame.from_records(records)
     # Reorder/select columns to match expectations and readability
     cols = [
         'SessionID', 'Major', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID',
-        'SeriesNumber', 'AccessionNumber', 'AcqDate', 'AcqTime', 'TriTime', 'ScanDur',
+        'Orig Series #', 'sample_name', 'AcqDate', 'AcqTime', 'TriTime', 'ScanDur',
         'Series_desc', 'Modality', 'DicomPath',
     ]
     df = df.reindex(columns=cols)
-    
-    # This works for the original files from Wynton (aka if they were in AIR)
-    metadata = pd.read_csv('/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/mri_series.csv')
-    metadata = metadata[metadata['Orig Study UID'] == df.iloc[0]['StudyInstanceUID']]
-    df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
-    if len(df_with_series_desc) == 0:
-        print(f'No series description found for {df.iloc[0]["StudyInstanceUID"]}')
+    # # This works for the original files from Wynton (aka if they were in AIR)
+    # metadata = pd.read_csv('/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/mri_series.csv')
+    # metadata = metadata[metadata['Orig Study UID'] == df.iloc[0]['StudyInstanceUID']]
+    # df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
+    # if len(df_with_series_desc) == 0:
+    #     print(f'No series description found for {df.iloc[0]["StudyInstanceUID"]}')
         
-        metadata = pd.read_csv(f'/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/{df.iloc[0]["AccessionNumber"]}/converted.csv')
-        first_row = list(metadata.columns)
-        cols = ['Series', 'File', 'Orig Series #', 'Series Desc']
-        metadata.columns = cols
-        metadata = pd.concat([pd.DataFrame([first_row], columns=cols), metadata],ignore_index=True)
-        df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
+    #     metadata = pd.read_csv(f'/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/{df.iloc[0]["AccessionNumber"]}/converted.csv')
+    #     first_row = list(metadata.columns)
+    #     cols = ['Series', 'File', 'Orig Series #', 'Series Desc']
+    #     metadata.columns = cols
+    #     metadata = pd.concat([pd.DataFrame([first_row], columns=cols), metadata],ignore_index=True)
+    #     df_with_series_desc = df.merge(metadata, left_on='SeriesNumber', right_on='Orig Series #' )
+    df_with_series_desc = df.merge(metadata)
     df_with_series_desc.to_csv(output_path, index=False)
     
     print(f'Wrote timing table with {len(df_with_series_desc)} rows to: {output_path}')
@@ -306,6 +306,36 @@ def filter_records(records: List[Dict], accession: Optional[str], patient: Optio
     return [r for r in records if keep(r)]
 
 
+def get_series_desc(df: pd.DataFrame, filter_accession: Optional[str] = None) -> pd.DataFrame:
+    series_descs = []
+    # This works for the original files from Wynton (aka if they were in AIR)
+    metadata = pd.read_csv('/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/mri_series.csv')
+    pd.options.mode.copy_on_write = True 
+    for _, row in tqdm(df.iterrows()):
+        row_metadata = metadata[metadata['Orig Study UID'] == row['Orig Study UID']]
+        row_metadata['sample_name'] = [row['sample_name']] * len(row_metadata)
+        if len(row_metadata) == 0:
+            try:
+                row_path = f'/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data/{row["sample_name"]}/converted.csv'
+                if not os.path.exists(row_path):
+                    print(f'{row["sample_name"]} | No metadata found')
+                    continue
+                row_metadata = pd.read_csv(row_path)
+                first_row = list(row_metadata.columns)
+                
+                cols = ['Series', 'File', 'Orig Series #', 'Orig Series Description']
+                row_metadata.columns = cols
+                row_metadata = pd.concat([pd.DataFrame([first_row], columns=cols), row_metadata],ignore_index=True)
+                row_metadata['sample_name'] = [row['sample_name']] * len(row_metadata)
+            except Exception as e:
+                print(f'{row["sample_name"]} | {e}')
+                continue
+        series_descs.append(row_metadata)
+    series = pd.concat(series_descs)
+    series = series[series['Series'].isin(['T1FS', 'Ph1', 'Ph2', 'Ph5'])]
+    print(len(series))
+    return series
+            
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Index DICOM MR series and build timing CSV')
@@ -321,6 +351,7 @@ def main():
     directories['sample_name'] = directories['Orig Acc #'].astype(str)
     
     df = accessions.merge(directories, how='left')
+    metadata = get_series_desc(df, filter_accession=args.filter_accession)
     
     acc_dicoms = {}
     # Stage 1: YAIB search (grouped by series)
@@ -332,10 +363,11 @@ def main():
             print(directory)
             series_dirs = get_air_series_dirs(args.filter_accession, directory=directory)
         acc_dicoms[args.filter_accession] = series_dirs
+        print(len(series_dirs))
         
 
     else:
-        for row in df.iterrows():
+        for _, row in df.iterrows():
             accession = row['sample_name']
             series_dirs = get_yaib_series_dirs(accession)
             if len(series_dirs) == 0:
@@ -343,6 +375,8 @@ def main():
                 # Stage 2: AIR extracted using metadata CSV
                 series_dirs = get_air_series_dirs(accession, directory=directory)
             acc_dicoms[accession] = series_dirs
+            print(len(series_dirs))
+    
    
     records = scan_series_from_dirs(acc_dicoms)
     if not records:
@@ -353,7 +387,7 @@ def main():
     #     print('No series matched filters.')
     #     return
     records = assign_major(records)
-    write_csv(records, args.output)
+    write_csv(records, args.output, metadata)
 
 
 if __name__ == '__main__':

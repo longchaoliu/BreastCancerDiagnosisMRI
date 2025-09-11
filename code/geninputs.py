@@ -17,8 +17,7 @@ manager = Manager()
 progress_queue = manager.Queue()
 LOGGER = get_logger('06_genInputs', 'data/logs/')
 
-LOAD_DIR = 'data/coreg/'
-SAVE_DIR = 'data/inputs/'
+SAVE_DIR = '/scratch/joyliu/data/breast_mr_ccny/'
 DEBUG = 0
 TEST = True
 N_TEST = 40
@@ -41,9 +40,9 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
     target_name = target.func.__name__ if isinstance(target, partial) else target.__name__
 
     # Debugging information
-    LOGGER.debug(f'Running {target_name} with progress bar')
-    LOGGER.debug(f'Number of items: {len(items)}')
-    LOGGER.debug(f'Parallel: {Parallel}')
+    print(f'Running {target_name} with progress bar')
+    print(f'Number of items: {len(items)}')
+    print(f'Parallel: {Parallel}')
 
     # Initialize progress bar
     if PROGRESS:
@@ -54,14 +53,13 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
     # Pass the progress queue to the target function
     target = partial(progress_wrapper, target=target, progress_queue=progress_queue, *args, **kwargs)
 
-    results = [target(item) for item in items]
     # Run the target function with a progress bar
-    # if Parallel:
-    #     with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-    #         futures = [executor.submit(target, item, *args, **kwargs) for item in items]
-    #         results = [future.result() for future in futures]
-    # else:
-    #     results = [target(item) for item in items]
+    if Parallel:
+        with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+            futures = [executor.submit(target, item, *args, **kwargs) for item in items]
+            results = [future.result() for future in futures]
+    else:
+        results = [target(item) for item in items]
 
     # Close the progress bar
     if PROGRESS:
@@ -69,8 +67,8 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
         print('\n')
         updater_thread.join()
 
-    LOGGER.debug(f'Completed {target_name} with progress bar')
-    LOGGER.debug(f'Number of results: {len(results)}')
+    print(f'Completed {target_name} with progress bar')
+    print(f'Number of results: {len(results)}')
 
     # Check if results is a list of tuples before returning zip(*results)
     if results and isinstance(results[0], tuple):
@@ -113,68 +111,114 @@ def generate_slopes(SessionID):
     # Should generate 2 slopes
     # Slope 1 - between 00 and 01
     # Slope 2 - between 01 and 0X
-    LOGGER.debug(f'Generating slopes for session: {SessionID}')
+    print(f'Generating slopes for session: {SessionID}')
     
-    Fils = glob.glob(f'{LOAD_DIR}/11581013/*.nii.gz')
-    Fils.sort()
-    LOGGER.debug(f'{SessionID} | Files | {Fils} ')
+    # Select timing rows for this session and sort by Major (acquisition order)
     Data = Data_table[Data_table['SessionID'] == SessionID]
-    if np.min([len(Data), len(Fils)]) < 3:
-        LOGGER.warning(f'{SessionID} | Skipping session due to insufficient number of scans (<3)')
+    if len(Data) == 0:
+        print(f'{SessionID} | Skipping: no timing rows found')
         return
+
+    # Determine dataset directory from sample_name and read NIfTI files (read-only)
+    dataset_base = '/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data'
+    sample_vals = Data['sample_name'].dropna().unique().tolist() if 'sample_name' in Data.columns else []
+    if len(sample_vals) == 0:
+        print(f"{SessionID} | Skipping: no sample_name in timing table for session")
+        return
+    sample_name = str(sample_vals[0])
+    if len(sample_vals) > 1:
+        print(f"{SessionID} | Multiple sample_name values detected: {sample_vals}. Using {sample_name}.")
+
+    dataset_dir = f'{dataset_base}/{sample_name}'
+    if not os.path.exists(dataset_dir):
+        print(f"{SessionID} | Skipping: dataset directory not found: {dataset_dir}")
+        return
+    Fils = glob.glob(f'{dataset_dir}/*.nii.gz')
+    Fils.sort()
+    if len(Fils) == 0:
+        print(f"{SessionID} | Skipping: no NIfTI files found in {dataset_dir}")
+        return
+    print(f'{SessionID} | Using dataset dir: {dataset_dir} | Files: {len(Fils)}')
     
-    if len(Data) != len(Fils):
-        LOGGER.warning(f'{SessionID} | Different number of files and detected times')
-        LOGGER.warning(f'{SessionID} | Analyzing timing spreadsheet to remove non-fat saturated (assumption!)')
-        # Data = Data[Data['Series_desc'].str.contains('FS', na=False)].reset_index(drop=True)
-    if not len(Data) == len(Fils):
-        LOGGER.error(f'{SessionID} | ERROR: different sizes cannot be fixed through Fat saturation')
-        return
+    # Define output directory by sample_name, not SessionID
+    output_dir = f"{SAVE_DIR}/{sample_name}"
+    
     Major = Data['Major'] # Major is the order of the scans
     sorting = np.argsort(Major) # Sorting the scans
-    #LOGGER.debug(f'{SessionID} | Sorting values| {sorting.values}')
-    #LOGGER.debug(f'{SessionID} | Trigger Time | {Data["TriTime"].values}')
-    #LOGGER.debug(f'{SessionID} | Scan Duration | {Data["ScanDur"].values}')
+    print(f'{SessionID} | Sorting values| {sorting.values}')
+    print(f'{SessionID} | Trigger Time | {Data["TriTime"].values}')
+    print(f'{SessionID} | Scan Duration | {Data["ScanDur"].values}')
     
     # Compose phase times in seconds
     Data_sorted = Data.iloc[sorting].reset_index(drop=True)
+
+    # Align files to timing rows using Series token present in filenames
+    files_upper = [(f, os.path.basename(f).upper()) for f in Fils]
+    used = set()
+    matched_files = []
+    matched_idx = []
+
+    def norm_series_token(s):
+        s = str(s or '').upper().replace(' ', '')
+        # Normalize some common variants
+        s = s.replace('PHASE', 'PH')
+        return s
+
+    for idx, row in Data_sorted.iterrows():
+        token = norm_series_token(row.get('Series', ''))
+        found = None
+        if token:
+            for f, name_up in files_upper:
+                if f in used:
+                    continue
+                if token in name_up:
+                    found = f
+                    break
+        if found is None:
+            # No direct token match; attempt fallback by looking for SeriesNumber pattern
+            series_num = row.get('Orig Series #') if 'Orig Series #' in Data_sorted.columns else row.get('SeriesNumber', None)
+            if series_num is not None:
+                series_num_str = str(int(series_num)) if isinstance(series_num, (int, float)) else str(series_num)
+                for f, name_up in files_upper:
+                    if f in used:
+                        continue
+                    if series_num_str in name_up:
+                        found = f
+                        break
+        if found is not None:
+            used.add(found)
+            matched_files.append(found)
+            matched_idx.append(idx)
+
+    if len(matched_files) < 3:
+        print(f"{SessionID} | Skipping: only matched {len(matched_files)} series to timing rows (need >=3).")
+        return
+
+    if len(matched_files) < len(Data_sorted):
+        print(f"{SessionID} | {len(matched_files)}/{len(Data_sorted)} timing rows matched to nifti files; continuing with matched subset.")
+
+    # Filter timing rows to those with matched files and reset index
+    Data_sorted = Data_sorted.iloc[matched_idx].reset_index(drop=True)
+    Fils = matched_files
     post_tris = Data_sorted['TriTime'][1:].values
     # If any post scan has unknown TriTime, fallback to estimating from AcqTime/ScanDur
-    if any([(t == 'Unknown') for t in post_tris]):
-        LOGGER.warning(f"{SessionID} | Post-scan TriTime unknown. Estimating phase times from AcqTime/ScanDur.")
-        try:
-            Times = estimate_phase_times_seconds(Data_sorted)
-        except Exception as e:
-            LOGGER.error(f'{SessionID} | Failed to estimate phase times from AcqTime/ScanDur')
-            LOGGER.error(f'{SessionID} | {e}')
-            return
-    else:
-        # Use TriTime directly (ms -> s), estimate pre if needed
-        try:
-            Times = [float(t)/1000.0 if t != 'Unknown' else 'Unknown' for t in Data_sorted['TriTime'].values]
-            if Times[0] == 'Unknown':
-                # Prefer ScanDur pre to back-calculate pre time from first post
-                scan_dur_us = Data_sorted['ScanDur'].iloc[0]
-                if isinstance(scan_dur_us, (int, float)):
-                    Times[0] = max(0.0, float(Times[1]) - float(scan_dur_us)/1000.0)
-                else:
-                    # Fallback to midpoint difference from AcqTime
-                    acq_hms = [(x or '').replace(':','') for x in Data_sorted['AcqTime'].values]
-                    acq_s = [int(t[0:2])*3600 + int(t[2:4])*60 + int(t[4:6]) if len(t) >= 6 else 0 for t in acq_hms]
-                    Times[0] = max(0.0, float(acq_s[0]) - float(acq_s[1]))
-        except Exception as e:
-            LOGGER.error(f'{SessionID} | Error processing TriTime fallback logic')
-            LOGGER.error(f'{SessionID} | {e}')
-            return
+    print(f"{SessionID} | Post-scan TriTime unknown. Estimating phase times from AcqTime/ScanDur.")
+    try:
+        Times = estimate_phase_times_seconds(Data_sorted)
+    except Exception as e:
+        LOGGER.error(f'{SessionID} | Failed to estimate phase times from AcqTime/ScanDur')
+        LOGGER.error(f'{SessionID} | {e}')
+        return
+    
             
-    LOGGER.debug(f'{SessionID} | Times | {Times}')
+    print(f'{SessionID} | Times | {Times}')
     
     # Load the 01 scan
     img = nib.load(Fils[0])
     data0 = img.get_fdata()
     data0[np.isnan(data0)] = 0
     p95 = float(np.percentile(data0,95))
-    LOGGER.debug(f'{SessionID} | 95% | {p95}')
+    print(f'{SessionID} | 95% | {p95}')
 
     header = img.header.copy()
     header['datatype'] = 16 # 32-bit float
@@ -209,12 +253,15 @@ def generate_slopes(SessionID):
         D[:,:,:,ii] = data0
     D[np.isnan(D)] = 0
 
-    LOGGER.debug(f'{SessionID} | Creating saving directory for inputs')
-    os.mkdir(SAVE_DIR + f'/{SessionID}')
+    print(f'{SessionID} | Creating saving directory for inputs')
+    try:
+        os.mkdir(output_dir)
+    except FileExistsError:
+        pass
 
     ###################################
     # Calculating slope 1 (enhancement)
-    LOGGER.debug(f'{SessionID} | Starting slope 1 calculation')
+    print(f'{SessionID} | Starting slope 1 calculation')
     Tmean = np.repeat(np.expand_dims(np.mean(T[:,:,:,0:2], axis=3), axis=-1), 2, axis=-1).astype(np.float32)
     Dmean = np.repeat(np.expand_dims(np.mean(D[:,:,:,0:2], axis=3), axis=-1), 2, axis=-1).astype(np.float32)
     slope1 = np.divide(
@@ -227,15 +274,15 @@ def generate_slopes(SessionID):
     header['glmin'] = np.min(slope1)
     header['descrip'] = 'pre slp img'
 
-    LOGGER.debug(f'{SessionID} | Slope 1 shape: {slope1.shape}')
-    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    print(f'{SessionID} | Slope 1 shape: {slope1.shape}')
+    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(slope1.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope1.nii.gz')
-    LOGGER.debug(f'{SessionID} | Saved slope 1')
+    nib.save(nib.Nifti1Image(slope1.astype('float32'), img.affine, header), output_dir + f'/slope1.nii.gz')
+    print(f'{SessionID} | Saved slope 1')
 
     ###################################
     # Calculating slope 2 (washout)
-    LOGGER.debug(f'{SessionID} | Starting slope 2 calculation')
+    print(f'{SessionID} | Starting slope 2 calculation')
     Tmean = np.repeat(np.expand_dims(np.mean(T[:,:,:,1:], axis=3), axis=-1), len(Times)-1, axis=-1).astype(np.float32)
     Dmean = np.repeat(np.expand_dims(np.mean(D[:,:,:,1:], axis=3), axis=-1), len(Times)-1, axis=-1).astype(np.float32)
     slope2 = np.divide(
@@ -248,25 +295,25 @@ def generate_slopes(SessionID):
     header['glmin'] = np.min(slope2)
     header['descrip'] = 'post slp img'
 
-    LOGGER.debug(f'{SessionID} | Slope 2 shape: {slope2.shape}')
-    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    print(f'{SessionID} | Slope 2 shape: {slope2.shape}')
+    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(slope2.astype('float32'), img.affine, header), SAVE_DIR + f'/{SessionID}/slope2.nii.gz')
-    LOGGER.debug(f'{SessionID} | Saved slope 2')
+    nib.save(nib.Nifti1Image(slope2.astype('float32'), img.affine, header), output_dir + f'/slope2.nii.gz')
+    print(f'{SessionID} | Saved slope 2')
 
     ###################################
     # Creating post-contrast image
-    LOGGER.debug(f'{SessionID} | Starting post contrast scan')
+    print(f'{SessionID} | Starting post contrast scan')
     img = nib.load(Fils[1])
     data1 = img.get_fdata().astype(np.float32)
     data1[np.isnan(data1)] = 0
     post = data1/p95
 
-    LOGGER.debug(f'{SessionID} | Post contrast shape: {post.shape}')
-    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    print(f'{SessionID} | Post contrast shape: {post.shape}')
+    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
-    nib.save(nib.Nifti1Image(post.astype('float32'), img.affine, img.header), SAVE_DIR + f'/{SessionID}/post.nii.gz')
-    LOGGER.debug(f'{SessionID} | Saved post contrast scan')
+    nib.save(nib.Nifti1Image(post.astype('float32'), img.affine, img.header), output_dir + f'/post.nii.gz')
+    print(f'{SessionID} | Saved post contrast scan')
 
     ###################################
 
@@ -280,16 +327,7 @@ if __name__ == '__main__':
         exit()
      
     session = np.unique(Data_table['SessionID'])
-    Dirs = os.listdir(f'{LOAD_DIR}/')
-    if TEST:
-        session = session[:N_TEST]
-        Dirs = Dirs[:N_TEST]
 
-    N = len(Dirs)
-    k = 0
-    
-    if N != len(session):
-        LOGGER.warning(f'Mismatch number of sessions and input directories | {len(session)} {N}')
 
     # Check if inputs have already been generated
     if os.path.exists(SAVE_DIR):
