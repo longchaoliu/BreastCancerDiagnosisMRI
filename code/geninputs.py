@@ -257,6 +257,7 @@ def generate_slopes(SessionID):
     try:
         os.mkdir(output_dir)
     except FileExistsError:
+        print(f'{SessionID} | Directory already exists')
         pass
 
     ###################################
@@ -317,6 +318,13 @@ def generate_slopes(SessionID):
 
     ###################################
 
+def generate_inputs_wrapper(SessionID): 
+    try:
+        generate_slopes(SessionID)
+    except Exception as e:
+        LOGGER.error(f'{SessionID} | Failed to generate inputs')
+        LOGGER.error(f'{SessionID} | {e}')
+        return
 
 
 if __name__ == '__main__':
@@ -339,4 +347,4 @@ if __name__ == '__main__':
         os.mkdir(SAVE_DIR)
 
 
-    run_with_progress(generate_slopes, session, Parallel=True)
+    run_with_progress(generate_inputs_wrapper, session, Parallel=True)

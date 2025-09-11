@@ -26,6 +26,7 @@ gathering all series in a session.
 """
 
 import os
+from re import L
 import sys
 import traceback
 from collections import defaultdict
@@ -54,7 +55,7 @@ AIR_EXTRACTED_ROOT = '/mnt/shareddata/datasets/AIR/extracted/'
 AIR_DIRS_CSV = '/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/metadata/full_studies_dirs.csv'
 
 OUTPUT_DIR = 'data'
-OUTPUT_PATH = f'{OUTPUT_DIR}/Data_table_timing.csv'
+OUTPUT_PATH = f'{OUTPUT_DIR}/Data_table_timing_complete.csv'
 
 
 def is_probably_dicom(file_path: str) -> bool:
@@ -93,7 +94,7 @@ def extract_series_record(file_path: str, ds, accession: Optional[str]) -> Optio
     try:
         modality = getattr(ds, 'Modality', None)
         if modality and str(modality).upper() != 'MR':
-            print(f"Skipping {file_path} because it is {modality} series")
+            # print(f"Skipping {file_path} because it is {modality} series")
             return None
 
         series_uid = getattr(ds, 'SeriesInstanceUID', None)
@@ -210,26 +211,30 @@ def get_air_series_dirs(accession: Optional[str], directory: Optional[str]) -> L
     return dirs
 
 
-def scan_series_from_dirs(series_dirs: List[str]) -> List[Dict]:
-    seen_series: set = set()
+def scan_series_from_dirs(series_dirs: List[str], metadata: pd.DataFrame) -> List[Dict]:
     records: List[Dict] = []
     for acc in tqdm(series_dirs):
         # sample = find_first_dicom_file(sdir)
         # if not sample:
         #     continue
         sdirs = series_dirs[acc]
-        for sdir in sdirs:
+        seen_phases: set = set()
+        metadata_sample = metadata[metadata['sample_name'] == acc]
+        for sdir in tqdm(sdirs):
             ds = try_read_header(sdir)
             if ds is None:
                 continue
-            series_uid = getattr(ds, 'SeriesInstanceUID', None)
-            if not series_uid or series_uid in seen_series:
-                continue
+
             rec = extract_series_record(sdir, ds, accession=acc)
             if rec is None:
                 continue
             records.append(rec)
-            seen_series.add(series_uid)
+            metadata_rec = metadata_sample[metadata_sample['Orig Series #'] == rec['Orig Series #']]
+            if len(metadata_rec) > 0:
+                seen_phases.add(metadata_rec['Series'].iloc[0])
+            if seen_phases == set(metadata_sample['Series']):
+                break
+            
     return records
 
 
@@ -322,18 +327,33 @@ def get_series_desc(df: pd.DataFrame, filter_accession: Optional[str] = None) ->
                     continue
                 row_metadata = pd.read_csv(row_path)
                 first_row = list(row_metadata.columns)
-                
-                cols = ['Series', 'File', 'Orig Series #', 'Orig Series Description']
+                if len(first_row) == 4:
+                    
+                    cols = ['Series', 'File', 'Orig Series #', 'Orig Series Description']
+                    
+                elif len(first_row) == 3:
+                    cols = ['Series', 'File', 'File Path']
+
                 row_metadata.columns = cols
                 row_metadata = pd.concat([pd.DataFrame([first_row], columns=cols), row_metadata],ignore_index=True)
                 row_metadata['sample_name'] = [row['sample_name']] * len(row_metadata)
+                if len(first_row) == 3:
+                    series_num = []
+                    for _, row_metadata in row_metadata.iterrows():
+                        for subfolder in YAIB_SUBFOLDERS:
+                            header = try_read_header(f"{YAIB_BASE}/{subfolder}/{row['sample_name']}/{row_metadata['File Path']}")
+                            if header is not None:
+                                series_num.append(header.SeriesNumber)
+                                break
+                            
+                    row['Orig Series #'] = series_num
             except Exception as e:
                 print(f'{row["sample_name"]} | {e}')
                 continue
         series_descs.append(row_metadata)
     series = pd.concat(series_descs)
     series = series[series['Series'].isin(['T1FS', 'Ph1', 'Ph2', 'Ph5'])]
-    print(len(series))
+
     return series
             
 def main():
@@ -365,6 +385,7 @@ def main():
         acc_dicoms[args.filter_accession] = series_dirs
         print(len(series_dirs))
         
+        
 
     else:
         for _, row in df.iterrows():
@@ -375,10 +396,20 @@ def main():
                 # Stage 2: AIR extracted using metadata CSV
                 series_dirs = get_air_series_dirs(accession, directory=directory)
             acc_dicoms[accession] = series_dirs
-            print(len(series_dirs))
-    
+            
+            if len(series_dirs) == 0:
+                directory = directories[directories['sample_name'] == row['sample_name']]['Directory']
+                if len(directory) == 0:
+                    print(f'{accession} | No series dirs found')
+
+                else: 
+                    directory = directory.iloc[0]
+                    series_dirs = get_air_series_dirs(accession, directory=directory)
+                acc_dicoms[accession] = series_dirs
+            
+                
    
-    records = scan_series_from_dirs(acc_dicoms)
+    records = scan_series_from_dirs(acc_dicoms, metadata)
     if not records:
         print('No MR series found in provided roots.')
         return
