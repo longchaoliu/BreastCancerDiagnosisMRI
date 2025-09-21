@@ -40,9 +40,9 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
     target_name = target.func.__name__ if isinstance(target, partial) else target.__name__
 
     # Debugging information
-    print(f'Running {target_name} with progress bar')
-    print(f'Number of items: {len(items)}')
-    print(f'Parallel: {Parallel}')
+    LOGGER.debug(f'Running {target_name} with progress bar')
+    LOGGER.debug(f'Number of items: {len(items)}')
+    LOGGER.debug(f'Parallel: {Parallel}')
 
     # Initialize progress bar
     if PROGRESS:
@@ -67,8 +67,8 @@ def run_with_progress(target: Callable[..., Any], items: List[Any], Parallel: bo
         print('\n')
         updater_thread.join()
 
-    print(f'Completed {target_name} with progress bar')
-    print(f'Number of results: {len(results)}')
+    LOGGER.debug(f'Completed {target_name} with progress bar')
+    LOGGER.debug(f'Number of results: {len(results)}')
 
     # Check if results is a list of tuples before returning zip(*results)
     if results and isinstance(results[0], tuple):
@@ -111,43 +111,43 @@ def generate_slopes(SessionID):
     # Should generate 2 slopes
     # Slope 1 - between 00 and 01
     # Slope 2 - between 01 and 0X
-    print(f'Generating slopes for session: {SessionID}')
+    LOGGER.warning(f'Generating slopes for session: {SessionID}')
     
     # Select timing rows for this session and sort by Major (acquisition order)
     Data = Data_table[Data_table['SessionID'] == SessionID]
     if len(Data) == 0:
-        print(f'{SessionID} | Skipping: no timing rows found')
+        LOGGER.warning(f'{SessionID} | Skipping: no timing rows found')
         return
 
     # Determine dataset directory from sample_name and read NIfTI files (read-only)
     dataset_base = '/mnt/shareddata/datasets/breast_ucsf_mri/contrast_pixel_space/data'
     sample_vals = Data['sample_name'].dropna().unique().tolist() if 'sample_name' in Data.columns else []
     if len(sample_vals) == 0:
-        print(f"{SessionID} | Skipping: no sample_name in timing table for session")
+        LOGGER.warning(f"{SessionID} | Skipping: no sample_name in timing table for session")
         return
     sample_name = str(sample_vals[0])
     if len(sample_vals) > 1:
-        print(f"{SessionID} | Multiple sample_name values detected: {sample_vals}. Using {sample_name}.")
+        LOGGER.warning(f"{SessionID} | Multiple sample_name values detected: {sample_vals}. Using {sample_name}.")
 
     dataset_dir = f'{dataset_base}/{sample_name}'
     if not os.path.exists(dataset_dir):
-        print(f"{SessionID} | Skipping: dataset directory not found: {dataset_dir}")
+        LOGGER.warning(f"{SessionID} | Skipping: dataset directory not found: {dataset_dir}")
         return
     Fils = glob.glob(f'{dataset_dir}/*.nii.gz')
     Fils.sort()
     if len(Fils) == 0:
-        print(f"{SessionID} | Skipping: no NIfTI files found in {dataset_dir}")
+        LOGGER.warning(f"{SessionID} | Skipping: no NIfTI files found in {dataset_dir}")
         return
-    print(f'{SessionID} | Using dataset dir: {dataset_dir} | Files: {len(Fils)}')
+    LOGGER.warning(f'{SessionID} | Using dataset dir: {dataset_dir} | Files: {len(Fils)}')
     
     # Define output directory by sample_name, not SessionID
     output_dir = f"{SAVE_DIR}/{sample_name}"
     
     Major = Data['Major'] # Major is the order of the scans
     sorting = np.argsort(Major) # Sorting the scans
-    print(f'{SessionID} | Sorting values| {sorting.values}')
-    print(f'{SessionID} | Trigger Time | {Data["TriTime"].values}')
-    print(f'{SessionID} | Scan Duration | {Data["ScanDur"].values}')
+    LOGGER.debug(f'{SessionID} | Sorting values| {sorting.values}')
+    LOGGER.debug(f'{SessionID} | Trigger Time | {Data["TriTime"].values}')
+    LOGGER.debug(f'{SessionID} | Scan Duration | {Data["ScanDur"].values}')
     
     # Compose phase times in seconds
     Data_sorted = Data.iloc[sorting].reset_index(drop=True)
@@ -191,18 +191,18 @@ def generate_slopes(SessionID):
             matched_idx.append(idx)
 
     if len(matched_files) < 3:
-        print(f"{SessionID} | Skipping: only matched {len(matched_files)} series to timing rows (need >=3).")
+        LOGGER.debug(f"{SessionID} | Skipping: only matched {len(matched_files)} series to timing rows (need >=3).")
         return
 
     if len(matched_files) < len(Data_sorted):
-        print(f"{SessionID} | {len(matched_files)}/{len(Data_sorted)} timing rows matched to nifti files; continuing with matched subset.")
+        LOGGER.debug(f"{SessionID} | {len(matched_files)}/{len(Data_sorted)} timing rows matched to nifti files; continuing with matched subset.")
 
     # Filter timing rows to those with matched files and reset index
     Data_sorted = Data_sorted.iloc[matched_idx].reset_index(drop=True)
     Fils = matched_files
     post_tris = Data_sorted['TriTime'][1:].values
     # If any post scan has unknown TriTime, fallback to estimating from AcqTime/ScanDur
-    print(f"{SessionID} | Post-scan TriTime unknown. Estimating phase times from AcqTime/ScanDur.")
+    LOGGER.debug(f"{SessionID} | Post-scan TriTime unknown. Estimating phase times from AcqTime/ScanDur.")
     try:
         Times = estimate_phase_times_seconds(Data_sorted)
     except Exception as e:
@@ -211,14 +211,14 @@ def generate_slopes(SessionID):
         return
     
             
-    print(f'{SessionID} | Times | {Times}')
+    LOGGER.debug(f'{SessionID} | Times | {Times}')
     
     # Load the 01 scan
     img = nib.load(Fils[0])
     data0 = img.get_fdata()
     data0[np.isnan(data0)] = 0
     p95 = float(np.percentile(data0,95))
-    print(f'{SessionID} | 95% | {p95}')
+    LOGGER.debug(f'{SessionID} | 95% | {p95}')
 
     header = img.header.copy()
     header['datatype'] = 16 # 32-bit float
@@ -253,16 +253,16 @@ def generate_slopes(SessionID):
         D[:,:,:,ii] = data0
     D[np.isnan(D)] = 0
 
-    print(f'{SessionID} | Creating saving directory for inputs')
+    LOGGER.debug(f'{SessionID} | Creating saving directory for inputs')
     try:
         os.mkdir(output_dir)
     except FileExistsError:
-        print(f'{SessionID} | Directory already exists')
+        LOGGER.debug(f'{SessionID} | Directory already exists')
         pass
 
     ###################################
     # Calculating slope 1 (enhancement)
-    print(f'{SessionID} | Starting slope 1 calculation')
+    LOGGER.debug(f'{SessionID} | Starting slope 1 calculation')
     Tmean = np.repeat(np.expand_dims(np.mean(T[:,:,:,0:2], axis=3), axis=-1), 2, axis=-1).astype(np.float32)
     Dmean = np.repeat(np.expand_dims(np.mean(D[:,:,:,0:2], axis=3), axis=-1), 2, axis=-1).astype(np.float32)
     slope1 = np.divide(
@@ -275,15 +275,15 @@ def generate_slopes(SessionID):
     header['glmin'] = np.min(slope1)
     header['descrip'] = 'pre slp img'
 
-    print(f'{SessionID} | Slope 1 shape: {slope1.shape}')
-    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    LOGGER.debug(f'{SessionID} | Slope 1 shape: {slope1.shape}')
+    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
     nib.save(nib.Nifti1Image(slope1.astype('float32'), img.affine, header), output_dir + f'/slope1.nii.gz')
-    print(f'{SessionID} | Saved slope 1')
+    LOGGER.debug(f'{SessionID} | Saved slope 1')
 
     ###################################
     # Calculating slope 2 (washout)
-    print(f'{SessionID} | Starting slope 2 calculation')
+    LOGGER.debug(f'{SessionID} | Starting slope 2 calculation')
     Tmean = np.repeat(np.expand_dims(np.mean(T[:,:,:,1:], axis=3), axis=-1), len(Times)-1, axis=-1).astype(np.float32)
     Dmean = np.repeat(np.expand_dims(np.mean(D[:,:,:,1:], axis=3), axis=-1), len(Times)-1, axis=-1).astype(np.float32)
     slope2 = np.divide(
@@ -296,25 +296,25 @@ def generate_slopes(SessionID):
     header['glmin'] = np.min(slope2)
     header['descrip'] = 'post slp img'
 
-    print(f'{SessionID} | Slope 2 shape: {slope2.shape}')
-    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    LOGGER.debug(f'{SessionID} | Slope 2 shape: {slope2.shape}')
+    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
     nib.save(nib.Nifti1Image(slope2.astype('float32'), img.affine, header), output_dir + f'/slope2.nii.gz')
-    print(f'{SessionID} | Saved slope 2')
+    LOGGER.debug(f'{SessionID} | Saved slope 2')
 
     ###################################
     # Creating post-contrast image
-    print(f'{SessionID} | Starting post contrast scan')
+    LOGGER.debug(f'{SessionID} | Starting post contrast scan')
     img = nib.load(Fils[1])
     data1 = img.get_fdata().astype(np.float32)
     data1[np.isnan(data1)] = 0
     post = data1/p95
 
-    print(f'{SessionID} | Post contrast shape: {post.shape}')
-    print(f'{SessionID} | Header shape: {header.get_data_shape()}')
+    LOGGER.debug(f'{SessionID} | Post contrast shape: {post.shape}')
+    LOGGER.debug(f'{SessionID} | Header shape: {header.get_data_shape()}')
 
     nib.save(nib.Nifti1Image(post.astype('float32'), img.affine, img.header), output_dir + f'/post.nii.gz')
-    print(f'{SessionID} | Saved post contrast scan')
+    LOGGER.debug(f'{SessionID} | Saved post contrast scan')
 
     ###################################
 
@@ -335,7 +335,6 @@ if __name__ == '__main__':
         exit()
      
     session = np.unique(Data_table['SessionID'])
-
 
     # Check if inputs have already been generated
     if os.path.exists(SAVE_DIR):
